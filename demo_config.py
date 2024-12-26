@@ -50,6 +50,8 @@ expansion_factors = [8]
 # note: learning rate is not used for topk
 learning_rates = [3e-4]
 
+wandb_project = "gemma-jumprelu_gated_sweep1"
+
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
         llm_batch_size=512, context_length=128, sae_batch_size=4096, dtype=t.float32
@@ -69,8 +71,8 @@ SPARSITY_PENALTIES = {
     ),
     "google/gemma-2-2b": SparsityPenalties(
         standard=[0.025, 0.035, 0.04, 0.05, 0.06, 0.07],
-        p_anneal=[-1] * 6,
-        gated=[-1] * 6,
+        p_anneal=[0.015, 0.025, 0.035, 0.04, 0.05, 0.06],
+        gated=[0.02, 0.04, 0.05, 0.06, 0.07, 0.08],
     ),
 }
 

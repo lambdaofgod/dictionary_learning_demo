@@ -52,7 +52,7 @@ def run_sae_training(
     dry_run: bool = False,
     use_wandb: bool = False,
     save_checkpoints: bool = False,
-    buffer_scaling_factor: int = 20,
+    buffer_scaling_factor: int = 100,
 ):
     # model and data parameters
     context_length = demo_config.LLM_CONFIG[model_name].context_length
@@ -63,6 +63,7 @@ def run_sae_training(
 
     num_contexts_per_sae_batch = sae_batch_size // context_length
     buffer_size = num_contexts_per_sae_batch * buffer_scaling_factor
+    buffer_size = 2048
 
     # sae training parameters
     # random_seeds = t.arange(10).tolist()
@@ -148,6 +149,8 @@ def run_sae_training(
             save_steps=save_steps,
             save_dir=save_dir,
             log_steps=log_steps,
+            wandb_project=demo_config.wandb_project,
+            normalize_activations=True,
         )
 
 
@@ -246,6 +249,9 @@ if __name__ == "__main__":
     python demo.py --save_dir ./run3 --model_name google/gemma-2-2b --layers 12 --architectures standard top_k --use_wandb
     python demo.py --save_dir ./jumprelu --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures jump_relu --use_wandb"""
     args = get_args()
+
+    import os
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     device = "cuda:0"
 
