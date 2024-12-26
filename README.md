@@ -4,7 +4,7 @@ Demonstration of how to train, evaluate, and plot evaluation results using the `
 
 ```
 git submodule update --init --recursive
-pip install -r requirements.txt
+pip install -e .
 ```
 
 # Usage
