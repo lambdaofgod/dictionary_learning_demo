@@ -99,6 +99,7 @@ class StandardTrainerConfig(BaseTrainerConfig):
     lr: float
     l1_penalty: float
     warmup_steps: int = 1000
+    sparsity_warmup_steps: Optional[int] = 2000
     resample_steps: Optional[int] = None
 
 
@@ -107,6 +108,7 @@ class StandardNewTrainerConfig(BaseTrainerConfig):
     lr: float
     l1_penalty: float
     warmup_steps: int = 1000
+    sparsity_warmup_steps: Optional[int] = 2000
     resample_steps: Optional[int] = None
 
 
@@ -139,7 +141,7 @@ class GatedTrainerConfig(BaseTrainerConfig):
     lr: float
     l1_penalty: float
     warmup_steps: int = 1000
-    resample_steps: Optional[int] = None
+    sparsity_warmup_steps: Optional[int] = 2000
 
 
 @dataclass
@@ -147,6 +149,7 @@ class JumpReluTrainerConfig(BaseTrainerConfig):
     lr: float
     target_l0: int
     sparsity_penalty: float = 1.0
+    sparsity_warmup_steps: Optional[int] = 2000
     bandwidth: float = 0.001
     steps: Optional[int] = None
 
