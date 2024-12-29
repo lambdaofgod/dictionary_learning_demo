@@ -47,6 +47,10 @@ eval_num_inputs = 1_000
 random_seeds = [0]
 expansion_factors = [8]
 
+WARMUP_STEPS = 1000
+SPARSITY_WARMUP_STEPS = 5000
+DECAY_START_FRACTION = 0.8
+
 # note: learning rate is not used for topk
 learning_rates = [3e-4]
 
@@ -71,7 +75,7 @@ SPARSITY_PENALTIES = {
     ),
     "google/gemma-2-2b": SparsityPenalties(
         standard=[0.025, 0.035, 0.04, 0.05, 0.06, 0.07],
-        p_anneal=[0.015, 0.025, 0.035, 0.04, 0.05, 0.06],
+        p_anneal=[0.006, 0.01, 0.012, 0.015, 0.02, 0.025],
         gated=[0.012, 0.018, 0.024, 0.04, 0.06, 0.08],
     ),
 }
@@ -92,14 +96,16 @@ class BaseTrainerConfig:
     trainer: Type[Any]
     dict_class: Type[Any]
     wandb_name: str
+    warmup_steps: int
+    steps: int
+    decay_start: Optional[int]
 
 
 @dataclass
 class StandardTrainerConfig(BaseTrainerConfig):
     lr: float
     l1_penalty: float
-    warmup_steps: int = 1000
-    sparsity_warmup_steps: Optional[int] = 2000
+    sparsity_warmup_steps: Optional[int]
     resample_steps: Optional[int] = None
 
 
@@ -107,8 +113,7 @@ class StandardTrainerConfig(BaseTrainerConfig):
 class StandardNewTrainerConfig(BaseTrainerConfig):
     lr: float
     l1_penalty: float
-    warmup_steps: int = 1000
-    sparsity_warmup_steps: Optional[int] = 2000
+    sparsity_warmup_steps: Optional[int]
     resample_steps: Optional[int] = None
 
 
@@ -116,6 +121,7 @@ class StandardNewTrainerConfig(BaseTrainerConfig):
 class PAnnealTrainerConfig(BaseTrainerConfig):
     lr: float
     initial_sparsity_penalty: float
+    sparsity_warmup_steps: Optional[int]
     sparsity_function: str = "Lp^p"
     p_start: float = 1.0
     p_end: float = 0.2
@@ -123,35 +129,30 @@ class PAnnealTrainerConfig(BaseTrainerConfig):
     anneal_end: Optional[int] = None
     sparsity_queue_length: int = 10
     n_sparsity_updates: int = 10
-    steps: Optional[int] = None
 
 
 @dataclass
 class TopKTrainerConfig(BaseTrainerConfig):
     k: int
     auxk_alpha: float = 1 / 32
-    decay_start: int = 24000
     threshold_beta: float = 0.999
     threshold_start_step: int = 10  # when to begin tracking the average threshold
-    steps: Optional[int] = None
 
 
 @dataclass
 class GatedTrainerConfig(BaseTrainerConfig):
     lr: float
     l1_penalty: float
-    warmup_steps: int = 1000
-    sparsity_warmup_steps: Optional[int] = 2000
+    sparsity_warmup_steps: Optional[int]
 
 
 @dataclass
 class JumpReluTrainerConfig(BaseTrainerConfig):
     lr: float
     target_l0: int
+    sparsity_warmup_steps: Optional[int]
     sparsity_penalty: float = 1.0
-    sparsity_warmup_steps: Optional[int] = 2000
     bandwidth: float = 0.001
-    steps: Optional[int] = None
 
 
 def get_trainer_configs(
@@ -166,12 +167,21 @@ def get_trainer_configs(
     layer: str,
     submodule_name: str,
     steps: int,
+    warmup_steps: int = WARMUP_STEPS,
+    sparsity_warmup_steps: int = SPARSITY_WARMUP_STEPS,
+    decay_start_fraction = DECAY_START_FRACTION,
 ) -> list[dict]:
+
+    decay_start = int(steps * decay_start_fraction)
+
     trainer_configs = []
 
     base_config = {
         "activation_dim": activation_dim,
         "dict_size": dict_size,
+        "steps": steps,
+        "warmup_steps": warmup_steps,
+        "decay_start": decay_start,
         "seed": seed,
         "device": device,
         "layer": layer,
@@ -184,9 +194,9 @@ def get_trainer_configs(
             **base_config,
             trainer=PAnnealTrainer,
             dict_class=AutoEncoder,
+            sparsity_warmup_steps=sparsity_warmup_steps,
             lr=learning_rate,
             initial_sparsity_penalty=SPARSITY_PENALTIES[model_name].p_anneal[sparsity_index],
-            steps=steps,
             wandb_name=f"PAnnealTrainer-{model_name}-{submodule_name}",
         )
         trainer_configs.append(asdict(config))
@@ -196,6 +206,7 @@ def get_trainer_configs(
             **base_config,
             trainer=StandardTrainer,
             dict_class=AutoEncoder,
+            sparsity_warmup_steps=sparsity_warmup_steps,
             lr=learning_rate,
             l1_penalty=SPARSITY_PENALTIES[model_name].standard[sparsity_index],
             wandb_name=f"StandardTrainer-{model_name}-{submodule_name}",
@@ -207,6 +218,7 @@ def get_trainer_configs(
             **base_config,
             trainer=StandardTrainer,
             dict_class=AutoEncoderNew,
+            sparsity_warmup_steps=sparsity_warmup_steps,
             lr=learning_rate,
             l1_penalty=SPARSITY_PENALTIES[model_name].standard[sparsity_index],
             wandb_name=f"StandardTrainerNew-{model_name}-{submodule_name}",
@@ -219,7 +231,6 @@ def get_trainer_configs(
             trainer=TopKTrainer,
             dict_class=AutoEncoderTopK,
             k=TARGET_L0s[sparsity_index],
-            steps=steps,
             wandb_name=f"TopKTrainer-{model_name}-{submodule_name}",
         )
         trainer_configs.append(asdict(config))
@@ -230,7 +241,6 @@ def get_trainer_configs(
             trainer=BatchTopKTrainer,
             dict_class=BatchTopKSAE,
             k=TARGET_L0s[sparsity_index],
-            steps=steps,
             wandb_name=f"TopKTrainer-{model_name}-{submodule_name}",
         )
         trainer_configs.append(asdict(config))
@@ -240,6 +250,7 @@ def get_trainer_configs(
             **base_config,
             trainer=GatedSAETrainer,
             dict_class=GatedAutoEncoder,
+            sparsity_warmup_steps=sparsity_warmup_steps,
             lr=learning_rate,
             l1_penalty=SPARSITY_PENALTIES[model_name].gated[sparsity_index],
             wandb_name=f"GatedTrainer-{model_name}-{submodule_name}",
@@ -251,6 +262,7 @@ def get_trainer_configs(
             **base_config,
             trainer=JumpReluTrainer,
             dict_class=JumpReluAutoEncoder,
+            sparsity_warmup_steps=sparsity_warmup_steps,
             lr=learning_rate,
             target_l0=TARGET_L0s[sparsity_index],
             wandb_name=f"JumpReluTrainer-{model_name}-{submodule_name}",
