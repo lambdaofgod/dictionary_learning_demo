@@ -240,13 +240,13 @@ if __name__ == "__main__":
 
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-    save_dir = f"{args.save_dir}_{args.model_name}_{'_'.join(args.architectures)}"
+    save_dir = f"{args.save_dir}_{args.model_name}_{'_'.join(args.architectures)}".replace("/", "_")
 
     for layer in args.layers:
         run_sae_training(
             model_name=args.model_name,
             layer=layer,
-            save_dir=args.save_dir,
+            save_dir=save_dir,
             device=args.device,
             architectures=args.architectures,
             num_tokens=demo_config.num_tokens,
@@ -257,7 +257,7 @@ if __name__ == "__main__":
             use_wandb=args.use_wandb,
         )
 
-    ae_paths = utils.get_nested_folders(args.save_dir)
+    ae_paths = utils.get_nested_folders(save_dir)
 
     eval_saes(
         args.model_name, ae_paths, demo_config.eval_num_inputs, args.device, overwrite_prev_results=True
