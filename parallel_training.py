@@ -3,23 +3,31 @@ import subprocess
 import time
 import os
 
-# Configuration for 3x 3090s
+# Configuration for 4x 3090s
+# For our current implementation, relative training speed is:
+# standard / p_anneal > top_k > batch_top_k > jump_relu > gated
+# So, we have jump_relu and gated on their own GPUs
 configurations = [
     {
-        "arch": ("standard", "gated"),
+        "arch": "jump_relu",
         "layers": 12,
         "device": "cuda:0"
     },
     {
-        "arch": ("top_k", "batch_top_k"),
+        "arch": "top_k p_anneal",
         "layers": 12,
         "device": "cuda:1"
     },
     {
-        "arch": ("jump_relu", "p_anneal"),
+        "arch": "batch_top_k standard",
         "layers": 12,
         "device": "cuda:2"
-    }
+    },
+    {
+        "arch": "gated",
+        "layers": 12,
+        "device": "cuda:3"
+    },
 ]
 
 SAVE_DIR = "trained_saes"
@@ -30,16 +38,16 @@ os.makedirs("logs", exist_ok=True)
 
 # Launch jobs
 for i, config in enumerate(configurations):
-    arch_pair = " ".join(config["arch"])
-    log_file = f"logs/{'_'.join(config['arch'])}_l{config['layers']}_{config['device'].replace(':', '_')}.out"
+    log_file = f"logs/{(config['arch'].replace(' ', '_'))}_l{config['layers']}_{config['device'].replace(':', '_')}.out"
     
     cmd = [
         "python", "demo.py",
         "--save_dir", SAVE_DIR,
         "--model_name", MODEL_NAME,
-        "--architectures", arch_pair,
+        "--architectures", config["arch"],
         "--layers", str(config["layers"]),
-        "--device", config["device"]
+        "--device", config["device"],
+        "--use_wandb"
     ]
     
     # Launch with nohup
@@ -51,7 +59,7 @@ for i, config in enumerate(configurations):
             stderr=subprocess.DEVNULL
         )
     
-    print(f"Started job {i}/3: {arch_pair} with {config['layers']} layers")
+    print(f"Started job {i + 1}/{len(configurations)}: {config['arch']} with layers: {config['layers']}")
     time.sleep(2)
 
 print("All jobs submitted!")
