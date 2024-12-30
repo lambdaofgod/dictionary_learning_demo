@@ -2,6 +2,7 @@ from dataclasses import dataclass, asdict
 from typing import Optional, Type, Any
 from enum import Enum
 import torch as t
+import itertools
 
 from dictionary_learning.trainers.standard import StandardTrainer
 from dictionary_learning.trainers.top_k import TopKTrainer, AutoEncoderTopK
@@ -45,7 +46,7 @@ class SparsityPenalties:
 num_tokens = 50_000_000
 eval_num_inputs = 1_000
 random_seeds = [0]
-expansion_factors = [8]
+dictionary_widths = [2**14]
 
 WARMUP_STEPS = 1000
 SPARSITY_WARMUP_STEPS = 5000
@@ -83,14 +84,10 @@ SPARSITY_PENALTIES = {
 
 TARGET_L0s = [20, 40, 80, 160, 320, 640]
 
-NUM_SPARSITIES = 6
-
 
 @dataclass
 class BaseTrainerConfig:
     activation_dim: int
-    dict_size: int
-    seed: int
     device: str
     layer: str
     lm_name: str
@@ -105,6 +102,8 @@ class BaseTrainerConfig:
 
 @dataclass
 class StandardTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
     lr: float
     l1_penalty: float
     sparsity_warmup_steps: Optional[int]
@@ -113,6 +112,8 @@ class StandardTrainerConfig(BaseTrainerConfig):
 
 @dataclass
 class StandardNewTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
     lr: float
     l1_penalty: float
     sparsity_warmup_steps: Optional[int]
@@ -121,6 +122,8 @@ class StandardNewTrainerConfig(BaseTrainerConfig):
 
 @dataclass
 class PAnnealTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
     lr: float
     initial_sparsity_penalty: float
     sparsity_warmup_steps: Optional[int]
@@ -135,6 +138,8 @@ class PAnnealTrainerConfig(BaseTrainerConfig):
 
 @dataclass
 class TopKTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
     k: int
     auxk_alpha: float = 1 / 32
     threshold_beta: float = 0.999
@@ -143,6 +148,8 @@ class TopKTrainerConfig(BaseTrainerConfig):
 
 @dataclass
 class GatedTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
     lr: float
     l1_penalty: float
     sparsity_warmup_steps: Optional[int]
@@ -150,6 +157,8 @@ class GatedTrainerConfig(BaseTrainerConfig):
 
 @dataclass
 class JumpReluTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
     lr: float
     target_l0: int
     sparsity_warmup_steps: Optional[int]
@@ -159,11 +168,10 @@ class JumpReluTrainerConfig(BaseTrainerConfig):
 
 def get_trainer_configs(
     architectures: list[str],
-    learning_rate: float,
-    sparsity_index: int,
-    seed: int,
+    learning_rates: list[float],
+    seeds: list[int],
     activation_dim: int,
-    dict_size: int,
+    dict_sizes: list[int],
     model_name: str,
     device: str,
     layer: str,
@@ -180,95 +188,127 @@ def get_trainer_configs(
 
     base_config = {
         "activation_dim": activation_dim,
-        "dict_size": dict_size,
         "steps": steps,
         "warmup_steps": warmup_steps,
         "decay_start": decay_start,
-        "seed": seed,
         "device": device,
         "layer": layer,
         "lm_name": model_name,
         "submodule_name": submodule_name,
     }
-
     if TrainerType.P_ANNEAL.value in architectures:
-        config = PAnnealTrainerConfig(
-            **base_config,
-            trainer=PAnnealTrainer,
-            dict_class=AutoEncoder,
-            sparsity_warmup_steps=sparsity_warmup_steps,
-            lr=learning_rate,
-            initial_sparsity_penalty=SPARSITY_PENALTIES[model_name].p_anneal[sparsity_index],
-            wandb_name=f"PAnnealTrainer-{model_name}-{submodule_name}",
-        )
-        trainer_configs.append(asdict(config))
+        for seed, dict_size, learning_rate, sparsity_penalty in itertools.product(
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].p_anneal
+        ):
+            config = PAnnealTrainerConfig(
+                **base_config,
+                trainer=PAnnealTrainer,
+                dict_class=AutoEncoder,
+                sparsity_warmup_steps=sparsity_warmup_steps,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                initial_sparsity_penalty=sparsity_penalty,
+                wandb_name=f"PAnnealTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
 
     if TrainerType.STANDARD.value in architectures:
-        config = StandardTrainerConfig(
-            **base_config,
-            trainer=StandardTrainer,
-            dict_class=AutoEncoder,
-            sparsity_warmup_steps=sparsity_warmup_steps,
-            lr=learning_rate,
-            l1_penalty=SPARSITY_PENALTIES[model_name].standard[sparsity_index],
-            wandb_name=f"StandardTrainer-{model_name}-{submodule_name}",
-        )
-        trainer_configs.append(asdict(config))
+        for seed, dict_size, learning_rate, l1_penalty in itertools.product(
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].standard
+        ):
+            config = StandardTrainerConfig(
+                **base_config,
+                trainer=StandardTrainer,
+                dict_class=AutoEncoder,
+                sparsity_warmup_steps=sparsity_warmup_steps,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                l1_penalty=l1_penalty,
+                wandb_name=f"StandardTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
 
     if TrainerType.STANDARD_NEW.value in architectures:
-        config = StandardNewTrainerConfig(
-            **base_config,
-            trainer=StandardTrainer,
-            dict_class=AutoEncoderNew,
-            sparsity_warmup_steps=sparsity_warmup_steps,
-            lr=learning_rate,
-            l1_penalty=SPARSITY_PENALTIES[model_name].standard[sparsity_index],
-            wandb_name=f"StandardTrainerNew-{model_name}-{submodule_name}",
-        )
-        trainer_configs.append(asdict(config))
-
-    if TrainerType.TOP_K.value in architectures:
-        config = TopKTrainerConfig(
-            **base_config,
-            trainer=TopKTrainer,
-            dict_class=AutoEncoderTopK,
-            k=TARGET_L0s[sparsity_index],
-            wandb_name=f"TopKTrainer-{model_name}-{submodule_name}",
-        )
-        trainer_configs.append(asdict(config))
-
-    if TrainerType.BATCH_TOP_K.value in architectures:
-        config = TopKTrainerConfig(
-            **base_config,
-            trainer=BatchTopKTrainer,
-            dict_class=BatchTopKSAE,
-            k=TARGET_L0s[sparsity_index],
-            wandb_name=f"TopKTrainer-{model_name}-{submodule_name}",
-        )
-        trainer_configs.append(asdict(config))
+        for seed, dict_size, learning_rate, l1_penalty in itertools.product(
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].standard
+        ):
+            config = StandardNewTrainerConfig(
+                **base_config,
+                trainer=StandardTrainer,
+                dict_class=AutoEncoderNew,
+                sparsity_warmup_steps=sparsity_warmup_steps,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                l1_penalty=l1_penalty,
+                wandb_name=f"StandardTrainerNew-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
 
     if TrainerType.GATED.value in architectures:
-        config = GatedTrainerConfig(
-            **base_config,
-            trainer=GatedSAETrainer,
-            dict_class=GatedAutoEncoder,
-            sparsity_warmup_steps=sparsity_warmup_steps,
-            lr=learning_rate,
-            l1_penalty=SPARSITY_PENALTIES[model_name].gated[sparsity_index],
-            wandb_name=f"GatedTrainer-{model_name}-{submodule_name}",
-        )
-        trainer_configs.append(asdict(config))
+        for seed, dict_size, learning_rate, l1_penalty in itertools.product(
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].gated
+        ):
+            config = GatedTrainerConfig(
+                **base_config,
+                trainer=GatedSAETrainer,
+                dict_class=GatedAutoEncoder,
+                sparsity_warmup_steps=sparsity_warmup_steps,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                l1_penalty=l1_penalty,
+                wandb_name=f"GatedTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
+
+    if TrainerType.TOP_K.value in architectures:
+        for seed, dict_size, learning_rate, k in itertools.product(
+            seeds, dict_sizes, learning_rates, TARGET_L0s
+        ):
+            config = TopKTrainerConfig(
+                **base_config,
+                trainer=TopKTrainer,
+                dict_class=AutoEncoderTopK,
+                dict_size=dict_size,
+                seed=seed,
+                k=k,
+                wandb_name=f"TopKTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
+
+    if TrainerType.BATCH_TOP_K.value in architectures:
+        for seed, dict_size, learning_rate, k in itertools.product(
+            seeds, dict_sizes, learning_rates, TARGET_L0s
+        ):
+            config = TopKTrainerConfig(
+                **base_config,
+                trainer=BatchTopKTrainer,
+                dict_class=BatchTopKSAE,
+                dict_size=dict_size,
+                seed=seed,
+                k=k,
+                wandb_name=f"TopKTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
 
     if TrainerType.JUMP_RELU.value in architectures:
-        config = JumpReluTrainerConfig(
-            **base_config,
-            trainer=JumpReluTrainer,
-            dict_class=JumpReluAutoEncoder,
-            sparsity_warmup_steps=sparsity_warmup_steps,
-            lr=learning_rate,
-            target_l0=TARGET_L0s[sparsity_index],
-            wandb_name=f"JumpReluTrainer-{model_name}-{submodule_name}",
-        )
-        trainer_configs.append(asdict(config))
+        for seed, dict_size, learning_rate, target_l0 in itertools.product(
+            seeds, dict_sizes, learning_rates, TARGET_L0s
+        ):
+            config = JumpReluTrainerConfig(
+                **base_config,
+                trainer=JumpReluTrainer,
+                dict_class=JumpReluAutoEncoder,
+                sparsity_warmup_steps=sparsity_warmup_steps,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                target_l0=target_l0,
+                wandb_name=f"JumpReluTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
 
     return trainer_configs

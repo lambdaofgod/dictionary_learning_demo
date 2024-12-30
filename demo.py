@@ -35,6 +35,7 @@ def get_args():
         required=True,
         help="which SAE architectures to train",
     )
+    parser.add_argument("--device", type=str, default="cuda:0", help="device to train on")
     args = parser.parse_args()
     return args
 
@@ -47,7 +48,7 @@ def run_sae_training(
     architectures: list,
     num_tokens: int,
     random_seeds: list[int],
-    expansion_factors: list[float],
+    dictionary_widths: list[int],
     learning_rates: list[float],
     dry_run: bool = False,
     use_wandb: bool = False,
@@ -64,11 +65,8 @@ def run_sae_training(
     num_contexts_per_sae_batch = sae_batch_size // context_length
     buffer_size = num_contexts_per_sae_batch * buffer_scaling_factor
     buffer_size = 2048
-
-    # sae training parameters
-    # random_seeds = t.arange(10).tolist()
-
-    sparsity_indices = t.arange(demo_config.NUM_SPARSITIES).tolist()
+    buffer_size_in_tokens = buffer_size * context_length
+    print(f"buffer_size: {buffer_size}, buffer_size_in_tokens: {buffer_size_in_tokens}")
 
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
 
@@ -111,28 +109,19 @@ def run_sae_training(
         device=device,
     )
 
-    # create the list of configs
-    trainer_configs = []
+    trainer_configs = demo_config.get_trainer_configs(
+        architectures,
+        learning_rates,
+        random_seeds,
+        activation_dim,
+        dictionary_widths,
+        model_name,
+        device,
+        layer,
+        submodule_name,
+        steps,
+    )
 
-    for seed, sparsity_index, expansion_factor, learning_rate in itertools.product(
-        random_seeds, sparsity_indices, expansion_factors, learning_rates
-    ):
-        dict_size = int(expansion_factor * activation_dim)
-        trainer_configs.extend(
-            demo_config.get_trainer_configs(
-                architectures,
-                learning_rate,
-                sparsity_index,
-                seed,
-                activation_dim,
-                dict_size,
-                model_name,
-                device,
-                layer,
-                submodule_name,
-                steps,
-            )
-        )
 
     print(f"len trainer configs: {len(trainer_configs)}")
     assert len(trainer_configs) > 0
@@ -249,21 +238,20 @@ if __name__ == "__main__":
     python demo.py --save_dir ./jumprelu --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures jump_relu --use_wandb"""
     args = get_args()
 
-    import os
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-    device = "cuda:0"
+    save_dir = f"{args.save_dir}_{args.model_name}_{'_'.join(args.architectures)}"
 
     for layer in args.layers:
         run_sae_training(
             model_name=args.model_name,
             layer=layer,
             save_dir=args.save_dir,
-            device=device,
+            device=args.device,
             architectures=args.architectures,
             num_tokens=demo_config.num_tokens,
             random_seeds=demo_config.random_seeds,
-            expansion_factors=demo_config.expansion_factors,
+            dictionary_widths=demo_config.dictionary_widths,
             learning_rates=demo_config.learning_rates,
             dry_run=args.dry_run,
             use_wandb=args.use_wandb,
@@ -272,5 +260,5 @@ if __name__ == "__main__":
     ae_paths = utils.get_nested_folders(args.save_dir)
 
     eval_saes(
-        args.model_name, ae_paths, demo_config.eval_num_inputs, device, overwrite_prev_results=True
+        args.model_name, ae_paths, demo_config.eval_num_inputs, args.device, overwrite_prev_results=True
     )
