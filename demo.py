@@ -68,8 +68,7 @@ def run_sae_training(
     # sae training parameters
     # random_seeds = t.arange(10).tolist()
 
-    num_sparsities = len(demo_config.TARGET_L0s)
-    sparsity_indices = t.arange(num_sparsities).tolist()
+    sparsity_indices = t.arange(demo_config.NUM_SPARSITIES).tolist()
 
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
 
