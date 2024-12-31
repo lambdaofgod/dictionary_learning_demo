@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Optional, Type, Any
 from enum import Enum
 import torch as t
@@ -10,6 +10,10 @@ from dictionary_learning.trainers.batch_top_k import BatchTopKTrainer, BatchTopK
 from dictionary_learning.trainers.gdm import GatedSAETrainer
 from dictionary_learning.trainers.p_anneal import PAnnealTrainer
 from dictionary_learning.trainers.jumprelu import JumpReluTrainer
+from dictionary_learning.trainers.matroyshka_batch_top_k import (
+    MatroyshkaBatchTopKTrainer,
+    MatroyshkaBatchTopKSAE,
+)
 from dictionary_learning.dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
@@ -26,6 +30,7 @@ class TrainerType(Enum):
     GATED = "gated"
     P_ANNEAL = "p_anneal"
     JUMP_RELU = "jump_relu"
+    MATROYSHKA_BATCH_TOP_K = "matroyshka_batch_top_k"
 
 
 @dataclass
@@ -143,7 +148,28 @@ class TopKTrainerConfig(BaseTrainerConfig):
     k: int
     auxk_alpha: float = 1 / 32
     threshold_beta: float = 0.999
-    threshold_start_step: int = 10  # when to begin tracking the average threshold
+    threshold_start_step: int = 1000  # when to begin tracking the average threshold
+
+
+@dataclass
+class MatroyshkaBatchTopKTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
+    k: int
+    group_fractions: list[float] = field(
+        default_factory=lambda: [
+            (1 / 64),
+            (1 / 32),
+            (1 / 16),
+            (1 / 8),
+            (1 / 4),
+            ((1 / 2) + (1 / 64)),
+        ]
+    )
+    group_weights: Optional[list[float]] = None
+    auxk_alpha: float = 1 / 32
+    threshold_beta: float = 0.999
+    threshold_start_step: int = 1000  # when to begin tracking the average threshold
 
 
 @dataclass
@@ -179,9 +205,8 @@ def get_trainer_configs(
     steps: int,
     warmup_steps: int = WARMUP_STEPS,
     sparsity_warmup_steps: int = SPARSITY_WARMUP_STEPS,
-    decay_start_fraction = DECAY_START_FRACTION,
+    decay_start_fraction=DECAY_START_FRACTION,
 ) -> list[dict]:
-
     decay_start = int(steps * decay_start_fraction)
 
     trainer_configs = []
@@ -290,7 +315,22 @@ def get_trainer_configs(
                 dict_size=dict_size,
                 seed=seed,
                 k=k,
-                wandb_name=f"TopKTrainer-{model_name}-{submodule_name}",
+                wandb_name=f"BatchTopKTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
+
+    if TrainerType.MATROYSHKA_BATCH_TOP_K.value in architectures:
+        for seed, dict_size, learning_rate, k in itertools.product(
+            seeds, dict_sizes, learning_rates, TARGET_L0s
+        ):
+            config = MatroyshkaBatchTopKTrainerConfig(
+                **base_config,
+                trainer=MatroyshkaBatchTopKTrainer,
+                dict_class=MatroyshkaBatchTopKSAE,
+                dict_size=dict_size,
+                seed=seed,
+                k=k,
+                wandb_name=f"MatroyshkaBatchTopKTrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))
 
