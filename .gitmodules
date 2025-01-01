@@ -1,3 +1,4 @@
 [submodule "dictionary_learning"]
 	path = dictionary_learning
-	url = git@github.com:saprmarks/dictionary_learning.git
+	url = git@github.com:adamkarvonen/dictionary_learning.git
+	branch = matroyshka
