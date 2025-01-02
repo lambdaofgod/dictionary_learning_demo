@@ -7,31 +7,42 @@ import os
 # For our current implementation, relative training speed is:
 # standard / p_anneal > top_k > batch_top_k > jump_relu > gated
 # So, we have jump_relu and gated on their own GPUs
+
+
+MODEL_NAME = "google/gemma-2-2b"
+MODEL_NAME = "EleutherAI/pythia-70m-deduped"
+if "gemma" in MODEL_NAME:
+    layer = 12
+elif "pythia" in MODEL_NAME:
+    layer = 3
+else:
+    raise ValueError("Unknown model name")
+
+
 configurations = [
     {
         "arch": "jump_relu",
-        "layers": 12,
+        "layers": layer,
         "device": "cuda:0"
     },
     {
         "arch": "top_k p_anneal",
-        "layers": 12,
+        "layers": layer,
         "device": "cuda:1"
     },
     {
         "arch": "batch_top_k standard",
-        "layers": 12,
+        "layers": layer,
         "device": "cuda:2"
     },
     {
         "arch": "gated",
-        "layers": 12,
+        "layers": layer,
         "device": "cuda:3"
     },
 ]
 
-SAVE_DIR = "trained_saes"
-MODEL_NAME = "google/gemma-2-2b"
+SAVE_DIR = "trained_saes/"
 
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)
