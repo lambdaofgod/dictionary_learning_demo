@@ -4,6 +4,7 @@ import argparse
 import itertools
 import os
 import json
+import torch.multiprocessing as mp
 
 import demo_config
 from dictionary_learning.utils import hf_dataset_to_generator
@@ -237,9 +238,15 @@ if __name__ == "__main__":
     python demo.py --save_dir ./jumprelu --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures jump_relu --use_wandb"""
     args = get_args()
 
+    # This prevents random CUDA out of memory errors
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    
+    # For wandb to work with multiprocessing
+    mp.set_start_method("spawn", force=True)
 
     save_dir = f"{args.save_dir}_{args.model_name}_{'_'.join(args.architectures)}".replace("/", "_")
+
+    save_checkpoints = False
 
     for layer in args.layers:
         run_sae_training(
@@ -254,6 +261,7 @@ if __name__ == "__main__":
             learning_rates=demo_config.learning_rates,
             dry_run=args.dry_run,
             use_wandb=args.use_wandb,
+            save_checkpoints=save_checkpoints,
         )
 
     ae_paths = utils.get_nested_folders(save_dir)
