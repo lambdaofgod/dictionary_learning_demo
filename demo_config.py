@@ -66,26 +66,20 @@ LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
         llm_batch_size=512, context_length=128, sae_batch_size=4096, dtype=t.float32
     ),
+    "EleutherAI/pythia-160m-deduped": LLMConfig(
+        llm_batch_size=64, context_length=1024, sae_batch_size=4096, dtype=t.float32
+    ),
     "google/gemma-2-2b": LLMConfig(
         llm_batch_size=32, context_length=128, sae_batch_size=2048, dtype=t.bfloat16
     ),
 }
 
-
-SPARSITY_PENALTIES = {
-    "EleutherAI/pythia-70m-deduped": SparsityPenalties(
-        standard=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
-        standard_new=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
-        p_anneal=[0.006, 0.008, 0.01, 0.015, 0.02, 0.025],
-        gated=[0.012, 0.018, 0.024, 0.04, 0.06, 0.08],
-    ),
-    "google/gemma-2-2b": SparsityPenalties(
-        standard=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
-        standard_new=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
-        p_anneal=[0.006, 0.008, 0.01, 0.015, 0.02, 0.025],
-        gated=[0.012, 0.018, 0.024, 0.04, 0.06, 0.08],
-    ),
-}
+SPARSITY_PENALTIES = SparsityPenalties(
+    standard=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
+    standard_new=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
+    p_anneal=[0.006, 0.008, 0.01, 0.015, 0.02, 0.025],
+    gated=[0.012, 0.018, 0.024, 0.04, 0.06, 0.08],
+)
 
 
 TARGET_L0s = [20, 40, 80, 160, 320, 640]
@@ -225,7 +219,7 @@ def get_trainer_configs(
     }
     if TrainerType.P_ANNEAL.value in architectures:
         for seed, dict_size, learning_rate, sparsity_penalty in itertools.product(
-            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].p_anneal
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES.p_anneal
         ):
             config = PAnnealTrainerConfig(
                 **base_config,
@@ -242,7 +236,7 @@ def get_trainer_configs(
 
     if TrainerType.STANDARD.value in architectures:
         for seed, dict_size, learning_rate, l1_penalty in itertools.product(
-            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].standard
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES.standard
         ):
             config = StandardTrainerConfig(
                 **base_config,
@@ -259,7 +253,7 @@ def get_trainer_configs(
 
     if TrainerType.STANDARD_NEW.value in architectures:
         for seed, dict_size, learning_rate, l1_penalty in itertools.product(
-            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].standard_new
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES.standard_new
         ):
             config = StandardNewTrainerConfig(
                 **base_config,
@@ -276,7 +270,7 @@ def get_trainer_configs(
 
     if TrainerType.GATED.value in architectures:
         for seed, dict_size, learning_rate, l1_penalty in itertools.product(
-            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].gated
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES.gated
         ):
             config = GatedTrainerConfig(
                 **base_config,
