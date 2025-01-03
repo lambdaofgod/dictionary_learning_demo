@@ -58,8 +58,7 @@ WARMUP_STEPS = 1000
 SPARSITY_WARMUP_STEPS = 5000
 DECAY_START_FRACTION = 0.8
 
-# note: learning rate is not used for topk
-learning_rates = [7e-5]
+learning_rates = [3e-4]
 
 wandb_project = "gemma-jumprelu_gated_sweep1"
 
@@ -76,13 +75,13 @@ LLM_CONFIG = {
 SPARSITY_PENALTIES = {
     "EleutherAI/pythia-70m-deduped": SparsityPenalties(
         standard=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
-        standard_new=[1.0, 1.5, 2.0, 4.0, 6.0, 8.0],
+        standard_new=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
         p_anneal=[0.006, 0.008, 0.01, 0.015, 0.02, 0.025],
         gated=[0.012, 0.018, 0.024, 0.04, 0.06, 0.08],
     ),
     "google/gemma-2-2b": SparsityPenalties(
         standard=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
-        standard_new=[1.0, 1.5, 2.0, 4.0, 6.0, 8.0],
+        standard_new=[0.012, 0.015, 0.02, 0.03, 0.04, 0.06],
         p_anneal=[0.006, 0.008, 0.01, 0.015, 0.02, 0.025],
         gated=[0.012, 0.018, 0.024, 0.04, 0.06, 0.08],
     ),
@@ -146,6 +145,7 @@ class PAnnealTrainerConfig(BaseTrainerConfig):
 class TopKTrainerConfig(BaseTrainerConfig):
     dict_size: int
     seed: int
+    lr: float
     k: int
     auxk_alpha: float = 1 / 32
     threshold_beta: float = 0.999
@@ -156,6 +156,7 @@ class TopKTrainerConfig(BaseTrainerConfig):
 class MatroyshkaBatchTopKTrainerConfig(BaseTrainerConfig):
     dict_size: int
     seed: int
+    lr: float
     k: int
     group_fractions: list[float] = field(
         default_factory=lambda: [
@@ -258,7 +259,7 @@ def get_trainer_configs(
 
     if TrainerType.STANDARD_NEW.value in architectures:
         for seed, dict_size, learning_rate, l1_penalty in itertools.product(
-            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].standard
+            seeds, dict_sizes, learning_rates, SPARSITY_PENALTIES[model_name].standard_new
         ):
             config = StandardNewTrainerConfig(
                 **base_config,
@@ -298,6 +299,7 @@ def get_trainer_configs(
                 **base_config,
                 trainer=TopKTrainer,
                 dict_class=AutoEncoderTopK,
+                lr=learning_rate,
                 dict_size=dict_size,
                 seed=seed,
                 k=k,
@@ -313,6 +315,7 @@ def get_trainer_configs(
                 **base_config,
                 trainer=BatchTopKTrainer,
                 dict_class=BatchTopKSAE,
+                lr=learning_rate,
                 dict_size=dict_size,
                 seed=seed,
                 k=k,
@@ -328,6 +331,7 @@ def get_trainer_configs(
                 **base_config,
                 trainer=MatroyshkaBatchTopKTrainer,
                 dict_class=MatroyshkaBatchTopKSAE,
+                lr=learning_rate,
                 dict_size=dict_size,
                 seed=seed,
                 k=k,
