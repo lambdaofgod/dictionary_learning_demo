@@ -3,6 +3,7 @@ from nnsight import LanguageModel
 import argparse
 import itertools
 import os
+import random
 import json
 import torch.multiprocessing as mp
 
@@ -56,6 +57,9 @@ def run_sae_training(
     save_checkpoints: bool = False,
     buffer_scaling_factor: int = 100,
 ):
+    random.seed(demo_config.random_seeds[0])
+    t.manual_seed(demo_config.random_seeds[0])
+
     # model and data parameters
     context_length = demo_config.LLM_CONFIG[model_name].context_length
 
@@ -68,7 +72,6 @@ def run_sae_training(
     buffer_size = 2048
     buffer_size_in_tokens = buffer_size * context_length
     print(f"buffer_size: {buffer_size}, buffer_size_in_tokens: {buffer_size_in_tokens}")
-
 
     log_steps = 100  # Log the training on wandb or print to console every log_steps
 
@@ -151,6 +154,9 @@ def eval_saes(
     overwrite_prev_results: bool = False,
     transcoder: bool = False,
 ) -> dict:
+    random.seed(demo_config.random_seeds[0])
+    t.manual_seed(demo_config.random_seeds[0])
+
     if transcoder:
         io = "in_and_out"
     else:
@@ -240,7 +246,7 @@ if __name__ == "__main__":
 
     # This prevents random CUDA out of memory errors
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-    
+
     # For wandb to work with multiprocessing
     mp.set_start_method("spawn", force=True)
 
