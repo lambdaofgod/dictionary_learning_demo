@@ -6,6 +6,7 @@ import os
 import random
 import json
 import torch.multiprocessing as mp
+import time
 
 import demo_config
 from dictionary_learning.utils import hf_dataset_to_generator
@@ -141,7 +142,7 @@ def run_sae_training(
             log_steps=log_steps,
             wandb_project=demo_config.wandb_project,
             normalize_activations=True,
-            verbose=True,
+            verbose=False,
         )
 
 
@@ -250,6 +251,8 @@ if __name__ == "__main__":
     # For wandb to work with multiprocessing
     mp.set_start_method("spawn", force=True)
 
+    start_time = time.time()
+
     save_dir = f"{args.save_dir}_{args.model_name}_{'_'.join(args.architectures)}".replace("/", "_")
 
     save_checkpoints = False
@@ -279,3 +282,5 @@ if __name__ == "__main__":
         args.device,
         overwrite_prev_results=True,
     )
+
+    print(f"Total time: {time.time() - start_time}")
