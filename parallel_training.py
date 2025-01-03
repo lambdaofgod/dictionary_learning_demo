@@ -31,7 +31,7 @@ configurations = [
         "device": "cuda:1"
     },
     {
-        "arch": "batch_top_k standard",
+        "arch": "batch_top_k standard_new",
         "layers": layer,
         "device": "cuda:2"
     },
