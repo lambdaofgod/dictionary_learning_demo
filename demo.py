@@ -69,6 +69,9 @@ def run_sae_training(
     buffer_size_in_tokens = buffer_size * context_length
     print(f"buffer_size: {buffer_size}, buffer_size_in_tokens: {buffer_size_in_tokens}")
 
+
+    log_steps = 100  # Log the training on wandb or print to console every log_steps
+
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
 
     if save_checkpoints:
@@ -83,10 +86,6 @@ def run_sae_training(
         print(f"save_steps: {save_steps}")
     else:
         save_steps = None
-
-    log_steps = 100  # Log the training on wandb
-    if not use_wandb:
-        log_steps = None
 
     model = LanguageModel(model_name, dispatch=True, device_map=device)
     model = model.to(dtype=dtype)
@@ -139,6 +138,7 @@ def run_sae_training(
             log_steps=log_steps,
             wandb_project=demo_config.wandb_project,
             normalize_activations=True,
+            verbose=True,
         )
 
 
