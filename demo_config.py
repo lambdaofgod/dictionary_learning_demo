@@ -49,7 +49,7 @@ class SparsityPenalties:
     gated: list[float]
 
 
-num_tokens = 50_000_000
+num_tokens = 200_000_000
 eval_num_inputs = 1_000
 random_seeds = [0]
 dictionary_widths = [2**14]
@@ -60,17 +60,17 @@ DECAY_START_FRACTION = 0.8
 
 learning_rates = [3e-4]
 
-wandb_project = "gemma-jumprelu_gated_sweep1"
+wandb_project = "pythia-160m-sweep"
 
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
-        llm_batch_size=512, context_length=128, sae_batch_size=4096, dtype=t.float32
-    ),
-    "EleutherAI/pythia-160m-deduped": LLMConfig(
         llm_batch_size=64, context_length=1024, sae_batch_size=4096, dtype=t.float32
     ),
+    "EleutherAI/pythia-160m-deduped": LLMConfig(
+        llm_batch_size=32, context_length=1024, sae_batch_size=4096, dtype=t.float32
+    ),
     "google/gemma-2-2b": LLMConfig(
-        llm_batch_size=32, context_length=128, sae_batch_size=2048, dtype=t.bfloat16
+        llm_batch_size=4, context_length=1024, sae_batch_size=2048, dtype=t.bfloat16
     ),
 }
 

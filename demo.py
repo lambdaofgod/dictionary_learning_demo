@@ -56,7 +56,7 @@ def run_sae_training(
     dry_run: bool = False,
     use_wandb: bool = False,
     save_checkpoints: bool = False,
-    buffer_scaling_factor: int = 100,
+    buffer_tokens: int = 250_000,
 ):
     random.seed(demo_config.random_seeds[0])
     t.manual_seed(demo_config.random_seeds[0])
@@ -68,11 +68,8 @@ def run_sae_training(
     sae_batch_size = demo_config.LLM_CONFIG[model_name].sae_batch_size
     dtype = demo_config.LLM_CONFIG[model_name].dtype
 
-    num_contexts_per_sae_batch = sae_batch_size // context_length
-    buffer_size = num_contexts_per_sae_batch * buffer_scaling_factor
-    buffer_size = 2048
-    buffer_size_in_tokens = buffer_size * context_length
-    print(f"buffer_size: {buffer_size}, buffer_size_in_tokens: {buffer_size_in_tokens}")
+    num_buffer_inputs = buffer_tokens // context_length
+    print(f"buffer_size: {num_buffer_inputs}, buffer_size_in_tokens: {buffer_tokens}")
 
     log_steps = 100  # Log the training on wandb or print to console every log_steps
 
@@ -104,7 +101,7 @@ def run_sae_training(
         generator,
         model,
         submodule,
-        n_ctxs=buffer_size,
+        n_ctxs=num_buffer_inputs,
         ctx_len=context_length,
         refresh_batch_size=llm_batch_size,
         out_batch_size=sae_batch_size,
