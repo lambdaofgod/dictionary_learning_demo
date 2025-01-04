@@ -9,12 +9,15 @@ import os
 # So, we have jump_relu and gated on their own GPUs
 
 
+MODEL_NAME = "EleutherAI/pythia-160m-deduped"
 MODEL_NAME = "google/gemma-2-2b"
 MODEL_NAME = "EleutherAI/pythia-70m-deduped"
 if "gemma" in MODEL_NAME:
     layer = 12
-elif "pythia" in MODEL_NAME:
+elif "pythia-70m" in MODEL_NAME:
     layer = 3
+elif "pythia-160m" in MODEL_NAME:
+    layer = 8
 else:
     raise ValueError("Unknown model name")
 
@@ -41,6 +44,20 @@ configurations = [
         "device": "cuda:3"
     },
 ]
+
+# config for 2x 3090s
+# configurations = [
+#     {
+#         "arch": "gated top_k p_anneal",
+#         "layers": layer,
+#         "device": "cuda:0"
+#     },
+#     {
+#         "arch": "jump_relu batch_top_k standard_new",
+#         "layers": layer,
+#         "device": "cuda:1"
+#     },
+# ]
 
 SAVE_DIR = "trained_saes/"
 
