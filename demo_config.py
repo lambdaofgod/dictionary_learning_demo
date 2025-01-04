@@ -64,10 +64,10 @@ wandb_project = "pythia-160m-sweep"
 
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
-        llm_batch_size=64, context_length=1024, sae_batch_size=4096, dtype=t.float32
+        llm_batch_size=64, context_length=1024, sae_batch_size=2048, dtype=t.float32
     ),
     "EleutherAI/pythia-160m-deduped": LLMConfig(
-        llm_batch_size=32, context_length=1024, sae_batch_size=4096, dtype=t.float32
+        llm_batch_size=32, context_length=1024, sae_batch_size=2048, dtype=t.float32
     ),
     "google/gemma-2-2b": LLMConfig(
         llm_batch_size=4, context_length=1024, sae_batch_size=2048, dtype=t.bfloat16
