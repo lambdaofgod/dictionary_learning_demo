@@ -162,7 +162,7 @@ def eval_saes(
 
     context_length = demo_config.LLM_CONFIG[model_name].context_length
     llm_batch_size = demo_config.LLM_CONFIG[model_name].llm_batch_size
-    loss_recovered_batch_size = llm_batch_size // 5
+    loss_recovered_batch_size = max(llm_batch_size // 5, 1)
     sae_batch_size = loss_recovered_batch_size * context_length
     dtype = demo_config.LLM_CONFIG[model_name].dtype
 
