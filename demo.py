@@ -21,6 +21,7 @@ def get_args():
     parser.add_argument("--save_dir", type=str, required=True, help="where to store sweep")
     parser.add_argument("--use_wandb", action="store_true", help="use wandb logging")
     parser.add_argument("--dry_run", action="store_true", help="dry run sweep")
+    parser.add_argument("--save_checkpoints", action="store_true", help="save checkpoints")
     parser.add_argument(
         "--layers", type=int, nargs="+", required=True, help="layers to train SAE on"
     )
@@ -253,8 +254,6 @@ if __name__ == "__main__":
 
     save_dir = f"{args.save_dir}_{args.model_name}_{'_'.join(args.architectures)}".replace("/", "_")
 
-    save_checkpoints = False
-
     for layer in args.layers:
         run_sae_training(
             model_name=args.model_name,
@@ -268,7 +267,7 @@ if __name__ == "__main__":
             learning_rates=demo_config.learning_rates,
             dry_run=args.dry_run,
             use_wandb=args.use_wandb,
-            save_checkpoints=save_checkpoints,
+            save_checkpoints=args.save_checkpoints,
         )
 
     ae_paths = utils.get_nested_folders(save_dir)

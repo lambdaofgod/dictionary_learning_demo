@@ -49,7 +49,7 @@ class SparsityPenalties:
     gated: list[float]
 
 
-num_tokens = 200_000_000
+num_tokens = 500_000_000
 eval_num_inputs = 1_000
 random_seeds = [0]
 dictionary_widths = [2**14]

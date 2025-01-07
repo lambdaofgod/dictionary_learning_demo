@@ -26,22 +26,26 @@ configurations = [
     {
         "arch": "jump_relu",
         "layers": layer,
-        "device": "cuda:0"
+        "device": "cuda:0",
+        "save_checkpoints": False
     },
     {
         "arch": "top_k p_anneal",
         "layers": layer,
-        "device": "cuda:1"
+        "device": "cuda:1",
+        "save_checkpoints": False
     },
     {
         "arch": "batch_top_k standard_new",
         "layers": layer,
-        "device": "cuda:2"
+        "device": "cuda:2",
+        "save_checkpoints": False
     },
     {
         "arch": "gated",
         "layers": layer,
-        "device": "cuda:3"
+        "device": "cuda:3",
+        "save_checkpoints": False
     },
 ]
 
@@ -68,6 +72,11 @@ os.makedirs("logs", exist_ok=True)
 for i, config in enumerate(configurations):
     log_file = f"logs/{(config['arch'].replace(' ', '_'))}_l{config['layers']}_{config['device'].replace(':', '_')}.out"
     
+    if config["save_checkpoints"]:
+        save_command = "--save_checkpoints"
+    else:
+        save_command = ""
+
     cmd = [
         "python", "demo.py",
         "--save_dir", SAVE_DIR,
@@ -75,8 +84,11 @@ for i, config in enumerate(configurations):
         "--architectures", config["arch"],
         "--layers", str(config["layers"]),
         "--device", config["device"],
-        "--use_wandb"
+        save_command,
+        # "--use_wandb"
     ]
+
+    print(" ".join(cmd))
     
     # Launch with nohup
     with open(log_file, "w") as f:
