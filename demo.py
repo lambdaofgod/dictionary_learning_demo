@@ -140,6 +140,7 @@ def run_sae_training(
             wandb_project=demo_config.wandb_project,
             normalize_activations=True,
             verbose=False,
+            autocast_dtype=t.bfloat16,
         )
 
 
