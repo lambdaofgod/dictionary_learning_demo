@@ -162,7 +162,7 @@ class MatroyshkaBatchTopKTrainerConfig(BaseTrainerConfig):
         ]
     )
     group_weights: Optional[list[float]] = None
-    weights_temperature: float = 1.0
+    weights_temperature: float = 100.0
     auxk_alpha: float = 1 / 32
     threshold_beta: float = 0.999
     threshold_start_step: int = 1000  # when to begin tracking the average threshold
