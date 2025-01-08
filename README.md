@@ -2,10 +2,13 @@ Demonstration of how to train, evaluate, and plot evaluation results using the `
 
 # Setup
 
+For ease of development, we use SSH for our git submodule url. If you don't have an ssh key setup, run `git config submodule.dictionary_learning.url https://github.com/saprmarks/dictionary_learning.git` before updating the submodule.
+
 ```
 git submodule update --init --recursive
 pip install -e .
 ```
+If using wandb logging, run `wandb login {my token}`. If downloading a gated model (like Gemma-2-2B) or uploading SAEs to huggingface, run `huggingface-cli login --token {my token}`.
 
 # Usage
 
