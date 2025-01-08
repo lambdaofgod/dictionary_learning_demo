@@ -50,7 +50,7 @@ class SparsityPenalties:
 
 
 num_tokens = 500_000_000
-eval_num_inputs = 1_000
+eval_num_inputs = 200
 random_seeds = [0]
 dictionary_widths = [2**14]
 
