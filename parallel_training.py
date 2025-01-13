@@ -11,7 +11,11 @@ import os
 
 MODEL_NAME = "EleutherAI/pythia-160m-deduped"
 MODEL_NAME = "google/gemma-2-2b"
-MODEL_NAME = "EleutherAI/pythia-70m-deduped"
+# MODEL_NAME = "EleutherAI/pythia-70m-deduped"
+
+# So we are forced to set MODEL_NAME before running this script
+MODEL_NAME = None
+
 if "gemma" in MODEL_NAME:
     layer = 12
 elif "pythia-70m" in MODEL_NAME:
