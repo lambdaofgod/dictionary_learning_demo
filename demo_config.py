@@ -10,9 +10,9 @@ from dictionary_learning.trainers.batch_top_k import BatchTopKTrainer, BatchTopK
 from dictionary_learning.trainers.gdm import GatedSAETrainer
 from dictionary_learning.trainers.p_anneal import PAnnealTrainer
 from dictionary_learning.trainers.jumprelu import JumpReluTrainer
-from dictionary_learning.trainers.matroyshka_batch_top_k import (
-    MatroyshkaBatchTopKTrainer,
-    MatroyshkaBatchTopKSAE,
+from dictionary_learning.trainers.matryoshka_batch_top_k import (
+    MatryoshkaBatchTopKTrainer,
+    MatryoshkaBatchTopKSAE,
 )
 from dictionary_learning.dictionary import (
     AutoEncoder,
@@ -30,7 +30,7 @@ class TrainerType(Enum):
     GATED = "gated"
     P_ANNEAL = "p_anneal"
     JUMP_RELU = "jump_relu"
-    MATROYSHKA_BATCH_TOP_K = "matroyshka_batch_top_k"
+    Matryoshka_BATCH_TOP_K = "matryoshka_batch_top_k"
 
 
 @dataclass
@@ -149,7 +149,7 @@ class TopKTrainerConfig(BaseTrainerConfig):
 
 
 @dataclass
-class MatroyshkaBatchTopKTrainerConfig(BaseTrainerConfig):
+class MatryoshkaBatchTopKTrainerConfig(BaseTrainerConfig):
     dict_size: int
     seed: int
     lr: float
@@ -318,19 +318,19 @@ def get_trainer_configs(
             )
             trainer_configs.append(asdict(config))
 
-    if TrainerType.MATROYSHKA_BATCH_TOP_K.value in architectures:
+    if TrainerType.Matryoshka_BATCH_TOP_K.value in architectures:
         for seed, dict_size, learning_rate, k in itertools.product(
             seeds, dict_sizes, learning_rates, TARGET_L0s
         ):
-            config = MatroyshkaBatchTopKTrainerConfig(
+            config = MatryoshkaBatchTopKTrainerConfig(
                 **base_config,
-                trainer=MatroyshkaBatchTopKTrainer,
-                dict_class=MatroyshkaBatchTopKSAE,
+                trainer=MatryoshkaBatchTopKTrainer,
+                dict_class=MatryoshkaBatchTopKSAE,
                 lr=learning_rate,
                 dict_size=dict_size,
                 seed=seed,
                 k=k,
-                wandb_name=f"MatroyshkaBatchTopKTrainer-{model_name}-{submodule_name}",
+                wandb_name=f"MatryoshkaBatchTopKTrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))
 
