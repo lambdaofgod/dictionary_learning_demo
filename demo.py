@@ -7,6 +7,7 @@ import random
 import json
 import torch.multiprocessing as mp
 import time
+import huggingface_hub
 
 import demo_config
 from dictionary_learning.utils import hf_dataset_to_generator
@@ -40,6 +41,7 @@ def get_args():
         help="which SAE architectures to train",
     )
     parser.add_argument("--device", type=str, default="cuda:0", help="device to train on")
+    parser.add_argument("--hf_repo_id", type=str, help="Hugging Face repo ID to push results to")
     args = parser.parse_args()
     return args
 
@@ -238,11 +240,27 @@ def eval_saes(
     return eval_results
 
 
+def push_to_huggingface(save_dir: str, repo_id: str):
+    api = huggingface_hub.HfApi()
+
+    api.upload_folder(
+        folder_path=save_dir,
+        repo_id=repo_id,
+        repo_type="model",
+        path_in_repo=save_dir,
+    )
+
+
 if __name__ == "__main__":
     """python demo.py --save_dir ./run2 --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures standard jump_relu batch_top_k top_k gated --use_wandb
     python demo.py --save_dir ./run3 --model_name google/gemma-2-2b --layers 12 --architectures standard top_k --use_wandb
     python demo.py --save_dir ./jumprelu --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures jump_relu --use_wandb"""
     args = get_args()
+
+    hf_repo_id = args.hf_repo_id
+
+    if hf_repo_id:
+        assert huggingface_hub.repo_exists(repo_id=hf_repo_id, repo_type="model")
 
     # This prevents random CUDA out of memory errors
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -281,3 +299,6 @@ if __name__ == "__main__":
     )
 
     print(f"Total time: {time.time() - start_time}")
+
+    if hf_repo_id:
+        push_to_huggingface(save_dir, hf_repo_id)
