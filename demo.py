@@ -8,6 +8,7 @@ import json
 import torch.multiprocessing as mp
 import time
 import huggingface_hub
+from datasets import config
 
 import demo_config
 from dictionary_learning.utils import hf_dataset_to_generator
@@ -267,6 +268,11 @@ if __name__ == "__main__":
 
     # For wandb to work with multiprocessing
     mp.set_start_method("spawn", force=True)
+
+    # Rarely I have internet issues on cloud GPUs and then the streaming read fails
+    # Hopefully the outage is shorter than 100 * 20 seconds
+    config.STREAMING_READ_MAX_RETRIES = 100
+    config.STREAMING_READ_RETRY_INTERVAL = 20
 
     start_time = time.time()
 
