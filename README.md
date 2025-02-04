@@ -20,13 +20,29 @@ The bottom of `demo.py` contains a variety of example commands for training a va
 
 We currently support the following SAEs:
 
-- ReLU
+- ReLU (Towards Monosemanticity, aka `standard`)
+- ReLU (Anthropic April Update, aka `standard_new`)
 - JumpReLU
 - TopK
 - BatchTopK
 - Gated
 - P-anneal ReLU
+- Matryoshka BatchTopK
+
+Confused about so many variants? BatchTopK is a reasonable default.
 
 NOTE: For TopK and BatchTopK, we record the average minimum activation value during training, enabling the use of the SAEs using a simple JumpReLU threshold during inference. We use this as the default approach during inference, as it tends to get a better loss recovered, eliminates interaction between features, and enables encoding only a subset of latents.
 
 We can then graph the results using `graphing.ipynb` if we specify the names of the output folders.
+
+There's also various command line arguments available. Notable ones include `hf_repo_id` to automatically push trained SAEs to HuggingFace after training and `save_checkpoints` to save checkpoints during training.
+
+# SAE Bench Replication
+
+SAE Bench provides a suite of baseline SAEs. You can deterministically reproduce the training of SAE Bench SAEs using this repository.
+
+As an example of how to reproduce the Gemma-2-2B 16K width TopK SAEs, set [num_tokens](https://github.com/adamkarvonen/dictionary_learning_demo/blob/main/demo_config.py#L54) to 500M and run the following command:
+
+`python demo.py --save_dir topk --model_name google/gemma-2-2b --layers 12 --architectures top_k`
+
+The SAE Bench suite was trained with the following widths: 2^12, 2^14, and 2^16. The width is set [here](https://github.com/adamkarvonen/dictionary_learning_demo/blob/main/demo_config.py#L57).

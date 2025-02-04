@@ -49,9 +49,10 @@ class SparsityPenalties:
     gated: list[float]
 
 
-# So we are forced to set num_tokens before running this script
-num_tokens = None
-# num_tokens = 500_000_000
+num_tokens = 50_000_000
+
+print(f"NOTE: Training on {num_tokens} tokens")
+
 eval_num_inputs = 200
 random_seeds = [0]
 dictionary_widths = [2**14]
