@@ -19,7 +19,6 @@ dependencies = [
     "plotly>=5.18.0",
     "torch==2.5.1",
     "tqdm>=4.66.1",
-    "umap-learn>=0.5.6",
     "zstandard>=0.22.0",
     "wandb>=0.12.0",
     "pytest>=6.2.4",
