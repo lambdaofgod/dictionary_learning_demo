@@ -4,17 +4,26 @@ from enum import Enum
 import torch as t
 import itertools
 
-from dictionary_learning.trainers.standard import StandardTrainer, StandardTrainerAprilUpdate
-from dictionary_learning.trainers.top_k import TopKTrainer, AutoEncoderTopK
-from dictionary_learning.trainers.batch_top_k import BatchTopKTrainer, BatchTopKSAE
-from dictionary_learning.trainers.gdm import GatedSAETrainer
-from dictionary_learning.trainers.p_anneal import PAnnealTrainer
-from dictionary_learning.trainers.jumprelu import JumpReluTrainer
-from dictionary_learning.trainers.matryoshka_batch_top_k import (
+from dictionary_learning.dictionary_learning.trainers.standard import (
+    StandardTrainer,
+    StandardTrainerAprilUpdate,
+)
+from dictionary_learning.dictionary_learning.trainers.top_k import (
+    TopKTrainer,
+    AutoEncoderTopK,
+)
+from dictionary_learning.dictionary_learning.trainers.batch_top_k import (
+    BatchTopKTrainer,
+    BatchTopKSAE,
+)
+from dictionary_learning.dictionary_learning.trainers.gdm import GatedSAETrainer
+from dictionary_learning.dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from dictionary_learning.dictionary_learning.trainers.jumprelu import JumpReluTrainer
+from dictionary_learning.dictionary_learning.trainers.matryoshka_batch_top_k import (
     MatryoshkaBatchTopKTrainer,
     MatryoshkaBatchTopKSAE,
 )
-from dictionary_learning.dictionary import (
+from dictionary_learning.dictionary_learning.dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
     AutoEncoderNew,
@@ -49,13 +58,14 @@ class SparsityPenalties:
     gated: list[float]
 
 
-num_tokens = 50_000_000
+num_tokens = 500_000_000
 
 print(f"NOTE: Training on {num_tokens} tokens")
 
 eval_num_inputs = 200
 random_seeds = [0]
-dictionary_widths = [2**14]
+dictionary_widths = [2**14, 2**16]
+# dictionary_widths = [2**14]
 
 WARMUP_STEPS = 1000
 SPARSITY_WARMUP_STEPS = 5000
@@ -63,7 +73,7 @@ DECAY_START_FRACTION = 0.8
 
 learning_rates = [3e-4]
 
-wandb_project = "pythia-160m-sweep"
+wandb_project = "qwen-32b-sweep"
 
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
@@ -73,6 +83,9 @@ LLM_CONFIG = {
         llm_batch_size=32, context_length=1024, sae_batch_size=2048, dtype=t.float32
     ),
     "google/gemma-2-2b": LLMConfig(
+        llm_batch_size=4, context_length=1024, sae_batch_size=2048, dtype=t.bfloat16
+    ),
+    "Qwen/Qwen2.5-Coder-32B-Instruct": LLMConfig(
         llm_batch_size=4, context_length=1024, sae_batch_size=2048, dtype=t.bfloat16
     ),
 }
@@ -85,7 +98,8 @@ SPARSITY_PENALTIES = SparsityPenalties(
 )
 
 
-TARGET_L0s = [20, 40, 80, 160, 320, 640]
+TARGET_L0s = [80, 160]
+# TARGET_L0s = [20, 40, 80, 160, 320, 640]
 
 
 @dataclass

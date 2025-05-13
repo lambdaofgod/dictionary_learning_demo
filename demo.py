@@ -1,29 +1,45 @@
+import os
+
+# I believe this environment variable should be set before importing torch
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import torch as t
-from nnsight import LanguageModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import argparse
 import itertools
-import os
 import random
 import json
 import torch.multiprocessing as mp
 import time
 import huggingface_hub
 from datasets import config
+from transformers import AutoTokenizer
 
 import demo_config
-from dictionary_learning.utils import hf_dataset_to_generator
-from dictionary_learning.buffer import ActivationBuffer
-from dictionary_learning.evaluation import evaluate
-from dictionary_learning.training import trainSAE
-import dictionary_learning.utils as utils
+
+# Kind of janky double importing dictionary_learning.dictionary_learning, but it works
+# This is leftover from when dictionary_learning was a only used as a submodule
+from dictionary_learning.dictionary_learning.utils import (
+    hf_dataset_to_generator,
+    hf_mixed_dataset_to_generator,
+    hf_sequence_packing_dataset_to_generator,
+)
+from dictionary_learning.dictionary_learning.pytorch_buffer import ActivationBuffer
+from dictionary_learning.dictionary_learning.evaluation import evaluate
+from dictionary_learning.dictionary_learning.training import trainSAE
+import dictionary_learning.dictionary_learning.utils as utils
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--save_dir", type=str, required=True, help="where to store sweep")
+    parser.add_argument(
+        "--save_dir", type=str, required=True, help="where to store sweep"
+    )
     parser.add_argument("--use_wandb", action="store_true", help="use wandb logging")
     parser.add_argument("--dry_run", action="store_true", help="dry run sweep")
-    parser.add_argument("--save_checkpoints", action="store_true", help="save checkpoints")
+    parser.add_argument(
+        "--save_checkpoints", action="store_true", help="save checkpoints"
+    )
     parser.add_argument(
         "--layers", type=int, nargs="+", required=True, help="layers to train SAE on"
     )
@@ -41,8 +57,16 @@ def get_args():
         required=True,
         help="which SAE architectures to train",
     )
-    parser.add_argument("--device", type=str, default="cuda:0", help="device to train on")
-    parser.add_argument("--hf_repo_id", type=str, help="Hugging Face repo ID to push results to")
+    parser.add_argument(
+        "--device", type=str, default="cuda:0", help="device to train on"
+    )
+    parser.add_argument(
+        "--hf_repo_id", type=str, help="Hugging Face repo ID to push results to"
+    )
+    parser.add_argument(
+        "--mixed_dataset", action="store_true", help="use mixed dataset"
+    )
+
     args = parser.parse_args()
     return args
 
@@ -61,6 +85,7 @@ def run_sae_training(
     use_wandb: bool = False,
     save_checkpoints: bool = False,
     buffer_tokens: int = 250_000,
+    mixed_dataset: bool = False,
 ):
     random.seed(demo_config.random_seeds[0])
     t.manual_seed(demo_config.random_seeds[0])
@@ -92,14 +117,33 @@ def run_sae_training(
     else:
         save_steps = None
 
-    model = LanguageModel(model_name, dispatch=True, device_map=device)
-    model = model.to(dtype=dtype)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name, device_map="auto", torch_dtype=dtype
+    )
+
+    model = utils.truncate_model(model, layer)
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
     submodule = utils.get_submodule(model, layer)
     submodule_name = f"resid_post_layer_{layer}"
     io = "out"
     activation_dim = model.config.hidden_size
 
-    generator = hf_dataset_to_generator("monology/pile-uncopyrighted")
+    if mixed_dataset:
+        qwen_system_prompt_to_remove = "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n"
+
+        assert "Qwen" in model_name, "Make sure system prompt matches model"
+
+        generator = hf_mixed_dataset_to_generator(
+            tokenizer,
+            system_prompt_to_remove=qwen_system_prompt_to_remove,
+            min_char=context_length * 4,
+        )
+    else:
+        generator = hf_sequence_packing_dataset_to_generator(
+            tokenizer,
+            min_chars=context_length * 4,
+        )
 
     activation_buffer = ActivationBuffer(
         generator,
@@ -112,6 +156,7 @@ def run_sae_training(
         io=io,
         d_submodule=activation_dim,
         device=device,
+        add_special_tokens=False,
     )
 
     trainer_configs = demo_config.get_trainer_configs(
@@ -145,6 +190,7 @@ def run_sae_training(
             normalize_activations=True,
             verbose=False,
             autocast_dtype=t.bfloat16,
+            backup_steps=1000,
         )
 
 
@@ -171,8 +217,22 @@ def eval_saes(
     sae_batch_size = loss_recovered_batch_size * context_length
     dtype = demo_config.LLM_CONFIG[model_name].dtype
 
-    model = LanguageModel(model_name, dispatch=True, device_map=device)
-    model = model.to(dtype=dtype)
+    max_layer = 0
+
+    for ae_path in ae_paths:
+        config_path = f"{ae_path}/config.json"
+
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
+        layer = config["trainer"]["layer"]
+        max_layer = max(max_layer, layer)
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name, device_map="auto", torch_dtype=dtype
+    )
+
+    model = utils.truncate_model(model, max_layer)
 
     buffer_size = n_inputs
     io = "out"
@@ -276,7 +336,11 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    save_dir = f"{args.save_dir}_{args.model_name}_{'_'.join(args.architectures)}".replace("/", "_")
+    save_dir = (
+        f"{args.save_dir}_{args.model_name}_{'_'.join(args.architectures)}".replace(
+            "/", "_"
+        )
+    )
 
     for layer in args.layers:
         run_sae_training(
@@ -292,6 +356,7 @@ if __name__ == "__main__":
             dry_run=args.dry_run,
             use_wandb=args.use_wandb,
             save_checkpoints=args.save_checkpoints,
+            mixed_dataset=args.mixed_dataset,
         )
 
     ae_paths = utils.get_nested_folders(save_dir)
