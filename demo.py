@@ -137,7 +137,7 @@ def run_sae_training(
         generator = hf_mixed_dataset_to_generator(
             tokenizer,
             system_prompt_to_remove=qwen_system_prompt_to_remove,
-            min_char=context_length * 4,
+            min_chars=context_length * 4,
         )
     else:
         generator = hf_sequence_packing_dataset_to_generator(
