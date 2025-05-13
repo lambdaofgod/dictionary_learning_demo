@@ -14,9 +14,13 @@ If using wandb logging, run `wandb login {my token}`. If downloading a gated mod
 
 In `demo_config.py`, we set various hyperparameters like number of training tokens and expansion factors. We also set various SAE specific hyperparameters, such as the bandwidth for JumpReLU.
 
-The bottom of `demo.py` contains a variety of example commands for training a variety of SAEs on different models. As an example, the following command will traing 30 different SAEs (6 sparsities per architecture) on 50 million tokens on Pythia-70M in ~1 hour on a RTX 3090. It will also evaluate all SAEs on metrics like L0 and loss recovered.
+The bottom of `demo.py` contains a variety of example commands for training a variety of SAEs on different models. As an example, the following command will traing 24 different SAEs (4 sparsities per architecture) on 50 million tokens on Pythia-70M in ~1 hour on a RTX 3090. It will also evaluate all SAEs on metrics like L0 and loss recovered.
 
 `python demo.py --save_dir ./saes --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures standard jump_relu batch_top_k top_k gated`
+
+As an example command to train on dataset with chat / pretrain mix, log with wandb, and upload to huggingface at the end, run the following. This easily fits on to an 80GB H100 (peak memory usage of 62 GB) and trains on 500M tokens in ~24 hours.
+
+`python demo.py --save_dir ./saes --model_name Qwen/Qwen2.5-Coder-32B-Instruct --layers 32 --architectures batch_top_k --use_wandb --hf_repo_id adamkarvonen/qwen_coder_32b_saes --mixed_dataset`
 
 We currently support the following SAEs:
 
@@ -36,6 +40,10 @@ NOTE: For TopK and BatchTopK, we record the average minimum activation value dur
 We can then graph the results using `graphing.ipynb` if we specify the names of the output folders.
 
 There's also various command line arguments available. Notable ones include `hf_repo_id` to automatically push trained SAEs to HuggingFace after training and `save_checkpoints` to save checkpoints during training.
+
+# How does this differ from dictionary_learning?
+
+The default settings are often pretty conservative in `dictionary_learning`. For example, the autocast dtype defaults to float32. We use bfloat16, which has been fine on all SAE variants tested and provides a ~1.5x speedup. However, if experimenting with new variants, you may want to initially test with float32 - this can bite you with underflow issues! We also use HuggingFace transformers instead of nnsight LanguageModels, which lets us easily truncate the model for significant memory savings. We also normalize activations and backup every 1000 steps by default.
 
 # SAE Bench Replication
 
