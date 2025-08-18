@@ -20,7 +20,11 @@ The bottom of `demo.py` contains a variety of example commands for training a va
 
 As an example command to train on dataset with chat / pretrain mix, log with wandb, and upload to huggingface at the end, run the following. This easily fits on to an 80GB H100 (peak memory usage of 62 GB) and trains on 500M tokens in ~24 hours.
 
+Note: I recommend carefully reading through the dataset creation function if you care about these details. There aren't existing best practices for training on chat / pretrain datasets, so I just made what I think are reasonable decisions.
+
 `python demo.py --save_dir ./saes --model_name Qwen/Qwen2.5-Coder-32B-Instruct --layers 32 --architectures batch_top_k --use_wandb --hf_repo_id adamkarvonen/qwen_coder_32b_saes --mixed_dataset`
+
+`python demo.py --save_dir ./saes --model_name Qwen/Qwen3-8B --layers 9 18 27 --architectures batch_top_k --hf_repo_id adamkarvonen/qwen3-8b-saes --mixed_dataset --use_wandb`
 
 We currently support the following SAEs:
 

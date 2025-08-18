@@ -70,10 +70,12 @@ dictionary_widths = [2**14, 2**16]
 WARMUP_STEPS = 1000
 SPARSITY_WARMUP_STEPS = 5000
 DECAY_START_FRACTION = 0.8
+K_ANNEAL_END_FRACTION = 0.1
+remove_bos = True
 
 learning_rates = [3e-4]
 
-wandb_project = "qwen-32b-sweep"
+wandb_project = "qwen-8b-sweep"
 
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
@@ -87,6 +89,9 @@ LLM_CONFIG = {
     ),
     "Qwen/Qwen2.5-Coder-32B-Instruct": LLMConfig(
         llm_batch_size=4, context_length=2048, sae_batch_size=2048, dtype=t.bfloat16
+    ),
+    "Qwen/Qwen3-8B": LLMConfig(
+        llm_batch_size=16, context_length=2048, sae_batch_size=2048, dtype=t.bfloat16
     ),
 }
 
@@ -161,6 +166,7 @@ class TopKTrainerConfig(BaseTrainerConfig):
     auxk_alpha: float = 1 / 32
     threshold_beta: float = 0.999
     threshold_start_step: int = 1000  # when to begin tracking the average threshold
+    k_anneal_steps: Optional[int] = None
 
 
 @dataclass
@@ -182,6 +188,7 @@ class MatryoshkaBatchTopKTrainerConfig(BaseTrainerConfig):
     auxk_alpha: float = 1 / 32
     threshold_beta: float = 0.999
     threshold_start_step: int = 1000  # when to begin tracking the average threshold
+    k_anneal_steps: Optional[int] = None
 
 
 @dataclass
@@ -218,8 +225,10 @@ def get_trainer_configs(
     warmup_steps: int = WARMUP_STEPS,
     sparsity_warmup_steps: int = SPARSITY_WARMUP_STEPS,
     decay_start_fraction=DECAY_START_FRACTION,
+    anneal_end_fraction=K_ANNEAL_END_FRACTION,
 ) -> list[dict]:
     decay_start = int(steps * decay_start_fraction)
+    anneal_end = int(steps * anneal_end_fraction)
 
     trainer_configs = []
 
@@ -313,6 +322,7 @@ def get_trainer_configs(
                 dict_size=dict_size,
                 seed=seed,
                 k=k,
+                k_anneal_steps=anneal_end,
                 wandb_name=f"TopKTrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))
@@ -329,6 +339,7 @@ def get_trainer_configs(
                 dict_size=dict_size,
                 seed=seed,
                 k=k,
+                k_anneal_steps=anneal_end,
                 wandb_name=f"BatchTopKTrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))
@@ -345,6 +356,7 @@ def get_trainer_configs(
                 dict_size=dict_size,
                 seed=seed,
                 k=k,
+                k_anneal_steps=anneal_end,
                 wandb_name=f"MatryoshkaBatchTopKTrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))

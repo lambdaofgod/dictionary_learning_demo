@@ -129,14 +129,22 @@ def run_sae_training(
     io = "out"
     activation_dim = model.config.hidden_size
 
-    if mixed_dataset:
-        qwen_system_prompt_to_remove = "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n"
+    if "Qwen" in model_name and demo_config.remove_bos:
+        print(
+            "\n\nWARNING: Qwen models do not have a bos token, we will remove the first non-pad token"
+        )
 
-        assert "Qwen" in model_name, "Make sure system prompt matches model"
+    if mixed_dataset:
+        # qwen_system_prompt_to_remove = "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n"
+
+        # assert "Qwen" in model_name, "Make sure system prompt matches model"
+        qwen_system_prompt_to_remove = None
 
         generator = hf_mixed_dataset_to_generator(
             tokenizer,
             system_prompt_to_remove=qwen_system_prompt_to_remove,
+            sequence_pack_pretrain=False,
+            system_prompt_removal_freq=0.0,
             min_chars=context_length * 4,
         )
     else:
@@ -157,6 +165,7 @@ def run_sae_training(
         d_submodule=activation_dim,
         device=device,
         add_special_tokens=False,
+        remove_bos=True,
     )
 
     trainer_configs = demo_config.get_trainer_configs(
