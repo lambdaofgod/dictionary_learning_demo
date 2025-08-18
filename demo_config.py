@@ -93,6 +93,12 @@ LLM_CONFIG = {
     "Qwen/Qwen3-8B": LLMConfig(
         llm_batch_size=16, context_length=2048, sae_batch_size=2048, dtype=t.bfloat16
     ),
+    "Qwen/Qwen3-14B": LLMConfig(
+        llm_batch_size=8, context_length=2048, sae_batch_size=2048, dtype=t.bfloat16
+    ),
+    "Qwen/Qwen3-32B": LLMConfig(
+        llm_batch_size=2, context_length=2048, sae_batch_size=2048, dtype=t.bfloat16
+    ),
 }
 
 SPARSITY_PENALTIES = SparsityPenalties(
