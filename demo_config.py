@@ -70,7 +70,7 @@ dictionary_widths = [2**14, 2**16]
 WARMUP_STEPS = 1000
 SPARSITY_WARMUP_STEPS = 5000
 DECAY_START_FRACTION = 0.8
-K_ANNEAL_END_FRACTION = 0.1
+K_ANNEAL_END_FRACTION = 0.5
 remove_bos = True
 
 learning_rates = [3e-4]
