@@ -70,10 +70,12 @@ dictionary_widths = [2**14, 2**16]
 WARMUP_STEPS = 1000
 SPARSITY_WARMUP_STEPS = 5000
 DECAY_START_FRACTION = 0.8
-K_ANNEAL_END_FRACTION = 0.5
+K_ANNEAL_END_FRACTION = 0.01
 remove_bos = True
+max_activation_norm_multiple = 10
 
-learning_rates = [3e-4]
+learning_rates = [5e-5]
+
 
 wandb_project = "qwen-8b-sweep"
 

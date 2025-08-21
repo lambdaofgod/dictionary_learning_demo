@@ -143,7 +143,7 @@ def run_sae_training(
         generator = hf_mixed_dataset_to_generator(
             tokenizer,
             system_prompt_to_remove=qwen_system_prompt_to_remove,
-            sequence_pack_pretrain=False,
+            sequence_pack_pretrain=True,
             system_prompt_removal_freq=0.0,
             min_chars=context_length * 4,
         )
@@ -165,7 +165,8 @@ def run_sae_training(
         d_submodule=activation_dim,
         device=device,
         add_special_tokens=False,
-        remove_bos=True,
+        remove_bos=demo_config.remove_bos,
+        max_activation_norm_multiple=demo_config.max_activation_norm_multiple,
     )
 
     trainer_configs = demo_config.get_trainer_configs(
@@ -283,6 +284,8 @@ def eval_saes(
             io=io,
             d_submodule=activation_dim,
             device=device,
+            remove_bos=demo_config.remove_bos,
+            max_activation_norm_multiple=demo_config.max_activation_norm_multiple,
         )
 
         eval_results = evaluate(
@@ -322,9 +325,9 @@ def push_to_huggingface(save_dir: str, repo_id: str):
 
 
 if __name__ == "__main__":
-    """python demo.py --save_dir ./run2 --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures standard jump_relu batch_top_k top_k gated --use_wandb
-    python demo.py --save_dir ./run3 --model_name google/gemma-2-2b --layers 12 --architectures standard top_k --use_wandb
-    python demo.py --save_dir ./jumprelu --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures jump_relu --use_wandb"""
+    """python demo.py --save_dir run2 --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures standard jump_relu batch_top_k top_k gated --use_wandb
+    python demo.py --save_dir run3 --model_name google/gemma-2-2b --layers 12 --architectures standard top_k --use_wandb
+    python demo.py --save_dir jumprelu --model_name EleutherAI/pythia-70m-deduped --layers 3 --architectures jump_relu --use_wandb"""
     args = get_args()
 
     hf_repo_id = args.hf_repo_id
