@@ -253,7 +253,7 @@ def eval_saes(
     input_strings = []
     for i, example in enumerate(generator):
         input_strings.append(example)
-        if i > n_inputs * 5:
+        if i > n_inputs * 5 * llm_batch_size:
             break
 
     eval_results = {}
