@@ -27,7 +27,7 @@ from dictionary_learning.dictionary_learning.utils import (
 from dictionary_learning.dictionary_learning.pytorch_buffer import ActivationBuffer
 from dictionary_learning.dictionary_learning.evaluation import evaluate
 from dictionary_learning.dictionary_learning.training import trainSAE
-import dictionary_learning.dictionary_learning.utils as utils
+import utils_modified as utils
 
 
 def get_args():

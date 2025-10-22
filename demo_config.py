@@ -23,6 +23,14 @@ from dictionary_learning.dictionary_learning.trainers.matryoshka_batch_top_k imp
     MatryoshkaBatchTopKTrainer,
     MatryoshkaBatchTopKSAE,
 )
+from thresholding_sae import (
+    ThresholdingAutoEncoderTopK,
+    ThresholdingTopKTrainer,
+)
+from matching_pursuit_sae import (
+    MatchingPursuitAutoEncoder,
+    MatchingPursuitTrainer,
+)
 from dictionary_learning.dictionary_learning.dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
@@ -40,6 +48,8 @@ class TrainerType(Enum):
     P_ANNEAL = "p_anneal"
     JUMP_RELU = "jump_relu"
     Matryoshka_BATCH_TOP_K = "matryoshka_batch_top_k"
+    THRESHOLDING_TOP_K = "thresholding_topk"
+    MATCHING_PURSUIT = "matching_pursuit"
 
 
 @dataclass
@@ -58,7 +68,7 @@ class SparsityPenalties:
     gated: list[float]
 
 
-num_tokens = 500_000_000
+num_tokens = 50_000_000
 
 print(f"NOTE: Training on {num_tokens} tokens")
 
@@ -67,8 +77,8 @@ random_seeds = [0]
 dictionary_widths = [2**14, 2**16]
 # dictionary_widths = [2**14]
 
-WARMUP_STEPS = 1000
-SPARSITY_WARMUP_STEPS = 5000
+WARMUP_STEPS = 100
+SPARSITY_WARMUP_STEPS = 500
 DECAY_START_FRACTION = 0.8
 K_ANNEAL_END_FRACTION = 0.01
 remove_bos = True
@@ -81,7 +91,7 @@ wandb_project = "qwen-8b-sweep"
 
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
-        llm_batch_size=64, context_length=1024, sae_batch_size=2048, dtype=t.float32
+        llm_batch_size=128, context_length=128, sae_batch_size=2048, dtype=t.float32
     ),
     "EleutherAI/pythia-160m-deduped": LLMConfig(
         llm_batch_size=32, context_length=1024, sae_batch_size=2048, dtype=t.float32
@@ -111,7 +121,7 @@ SPARSITY_PENALTIES = SparsityPenalties(
 )
 
 
-TARGET_L0s = [80, 160]
+TARGET_L0s = [20, 40, 80, 160, 160]
 # TARGET_L0s = [20, 40, 80, 160, 320, 640]
 
 
@@ -175,6 +185,16 @@ class TopKTrainerConfig(BaseTrainerConfig):
     threshold_beta: float = 0.999
     threshold_start_step: int = 1000  # when to begin tracking the average threshold
     k_anneal_steps: Optional[int] = None
+
+
+@dataclass
+class MatchingPursuitTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
+    lr: float
+    s: int  # number of matching pursuit steps
+    auxk_alpha: float = 1 / 32
+    s_anneal_steps: Optional[int] = None
 
 
 @dataclass
@@ -383,6 +403,40 @@ def get_trainer_configs(
                 seed=seed,
                 target_l0=target_l0,
                 wandb_name=f"JumpReluTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
+
+    if TrainerType.THRESHOLDING_TOP_K.value in architectures:
+        for seed, dict_size, learning_rate, k in itertools.product(
+            seeds, dict_sizes, learning_rates, TARGET_L0s
+        ):
+            config = TopKTrainerConfig(
+                **base_config,
+                trainer=ThresholdingTopKTrainer,
+                dict_class=ThresholdingAutoEncoderTopK,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                k=k,
+                k_anneal_steps=anneal_end,
+                wandb_name=f"ThresholdingTopKTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
+
+    if TrainerType.MATCHING_PURSUIT.value in architectures:
+        for seed, dict_size, learning_rate, s in itertools.product(
+            seeds, dict_sizes, learning_rates, TARGET_L0s  # Using TARGET_L0s for S values
+        ):
+            config = MatchingPursuitTrainerConfig(
+                **base_config,
+                trainer=MatchingPursuitTrainer,
+                dict_class=MatchingPursuitAutoEncoder,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                s=s,
+                s_anneal_steps=anneal_end,
+                wandb_name=f"MatchingPursuitTrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))
 
