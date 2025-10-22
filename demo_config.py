@@ -26,6 +26,8 @@ from dictionary_learning.dictionary_learning.trainers.matryoshka_batch_top_k imp
 from thresholding_sae import (
     ThresholdingAutoEncoderTopK,
     ThresholdingTopKTrainer,
+    NestedThresholdingAutoEncoderTopK,
+    NestedThresholdingTopKTrainer,
 )
 from matching_pursuit_sae import (
     MatchingPursuitAutoEncoder,
@@ -49,6 +51,7 @@ class TrainerType(Enum):
     JUMP_RELU = "jump_relu"
     Matryoshka_BATCH_TOP_K = "matryoshka_batch_top_k"
     THRESHOLDING_TOP_K = "thresholding_topk"
+    NESTED_THRESHOLDING_TOP_K = "nested_thresholding_topk"
     MATCHING_PURSUIT = "matching_pursuit"
 
 
@@ -91,7 +94,7 @@ wandb_project = "qwen-8b-sweep"
 
 LLM_CONFIG = {
     "EleutherAI/pythia-70m-deduped": LLMConfig(
-        llm_batch_size=128, context_length=128, sae_batch_size=2048, dtype=t.float32
+        llm_batch_size=128, context_length=128, sae_batch_size=2048, dtype=t.float16
     ),
     "EleutherAI/pythia-160m-deduped": LLMConfig(
         llm_batch_size=32, context_length=1024, sae_batch_size=2048, dtype=t.float32
@@ -121,7 +124,7 @@ SPARSITY_PENALTIES = SparsityPenalties(
 )
 
 
-TARGET_L0s = [20, 40, 80, 160, 160]
+TARGET_L0s = [20, 40, 80, 160, 320]
 # TARGET_L0s = [20, 40, 80, 160, 320, 640]
 
 
@@ -185,6 +188,16 @@ class TopKTrainerConfig(BaseTrainerConfig):
     threshold_beta: float = 0.999
     threshold_start_step: int = 1000  # when to begin tracking the average threshold
     k_anneal_steps: Optional[int] = None
+
+
+@dataclass
+class NestedThresholdingTopKTrainerConfig(BaseTrainerConfig):
+    dict_size: int
+    seed: int
+    lr: float
+    k_values: list[int]
+    k_weights: Optional[list[float]] = None
+    auxk_alpha: float = 1 / 32  # when to begin tracking the average threshold
 
 
 @dataclass
@@ -425,7 +438,10 @@ def get_trainer_configs(
 
     if TrainerType.MATCHING_PURSUIT.value in architectures:
         for seed, dict_size, learning_rate, s in itertools.product(
-            seeds, dict_sizes, learning_rates, TARGET_L0s  # Using TARGET_L0s for S values
+            seeds,
+            dict_sizes,
+            learning_rates,
+            TARGET_L0s,  # Using TARGET_L0s for S values
         ):
             config = MatchingPursuitTrainerConfig(
                 **base_config,
@@ -437,6 +453,33 @@ def get_trainer_configs(
                 s=s,
                 s_anneal_steps=anneal_end,
                 wandb_name=f"MatchingPursuitTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
+
+    if TrainerType.NESTED_THRESHOLDING_TOP_K.value in architectures:
+        # For nested thresholding, we use multiple k values at once
+        # We'll use subsets of TARGET_L0s to create nested configurations
+        for seed, dict_size, learning_rate in itertools.product(
+            seeds, dict_sizes, learning_rates
+        ):
+            # Use all TARGET_L0s values for nested training
+            k_values = sorted(
+                TARGET_L0s
+            )  # Ensure they're sorted from smallest to largest
+
+            # Use uniform weights by default
+            k_weights = [1.0 / len(k_values)] * len(k_values)
+
+            config = NestedThresholdingTopKTrainerConfig(
+                **base_config,
+                trainer=NestedThresholdingTopKTrainer,
+                dict_class=NestedThresholdingAutoEncoderTopK,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                k_values=k_values,
+                k_weights=k_weights,
+                wandb_name=f"NestedThresholdingTopKTrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))
 

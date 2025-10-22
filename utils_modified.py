@@ -23,8 +23,8 @@ from dictionary_learning.dictionary_learning.dictionary import (
 # Import the new SAE classes from our files
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from thresholding_sae import ThresholdingAutoEncoderTopK
-from matching_pursuit_sae import MatchingPursuitAutoEncoder
+from thresholding_sae import ThresholdingAutoEncoderTopK, NestedThresholdingAutoEncoderTopK
+from matching_pursuit_sae import MatchingPursuitAutoEncoder, NestedMatchingPursuitAutoEncoder
 
 
 def hf_dataset_to_generator(dataset_name, split="train", streaming=True):
@@ -285,9 +285,15 @@ def load_dictionary(base_path: str, device: str) -> tuple:
     elif dict_class == "ThresholdingAutoEncoderTopK":
         k = config["trainer"]["k"]
         dictionary = ThresholdingAutoEncoderTopK.from_pretrained(ae_path, k=k, device=device)
+    elif dict_class == "NestedThresholdingAutoEncoderTopK":
+        k_values = config["trainer"]["k_values"]
+        dictionary = NestedThresholdingAutoEncoderTopK.from_pretrained(ae_path, k_values=k_values, device=device)
     elif dict_class == "MatchingPursuitAutoEncoder":
         s = config["trainer"]["s"]
         dictionary = MatchingPursuitAutoEncoder.from_pretrained(ae_path, s=s, device=device)
+    elif dict_class == "NestedMatchingPursuitAutoEncoder":
+        s_values = config["trainer"]["s_values"]
+        dictionary = NestedMatchingPursuitAutoEncoder.from_pretrained(ae_path, s_values=s_values, device=device)
     else:
         raise ValueError(f"Dictionary class {dict_class} not supported")
 

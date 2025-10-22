@@ -1,13 +1,18 @@
 """
 Implements the Matching Pursuit SAE training scheme.
 Based on the structure of ThresholdingAutoEncoderTopK from https://arxiv.org/abs/2406.04093.
+
+Note on tensor dimensions:
+- Inputs are pre-flattened from (batch, seq, activation_dim) to (n_tokens, activation_dim)
+- n_tokens = batch * seq_len (typically batch_size * context_length)
 """
 
 import einops
 import torch as t
 import torch.nn as nn
 from collections import namedtuple
-from typing import Optional
+from typing import Optional, Dict, Tuple
+from jaxtyping import Float, Int
 
 from dictionary_learning.dictionary_learning.config import DEBUG
 from dictionary_learning.dictionary_learning.dictionary import Dictionary
@@ -20,7 +25,11 @@ from dictionary_learning.dictionary_learning.trainers.trainer import (
 
 
 @t.no_grad()
-def geometric_median(points: t.Tensor, max_iter: int = 100, tol: float = 1e-5):
+def geometric_median(
+    points: Float[t.Tensor, "n_tokens activation_dim"],
+    max_iter: int = 100,
+    tol: float = 1e-5
+) -> Float[t.Tensor, "activation_dim"]:
     """Compute the geometric median `points`. Used for initializing decoder bias."""
     # Initialize our guess as the mean of the points
     guess = points.mean(dim=0)
@@ -76,17 +85,23 @@ class MatchingPursuitAutoEncoder(Dictionary, nn.Module):
         self.b_dec = nn.Parameter(t.zeros(activation_dim))
 
     def encode(
-        self, x: t.Tensor, return_info: bool = False
-    ):
+        self,
+        x: Float[t.Tensor, "n_tokens activation_dim"],
+        return_info: bool = False
+    ) -> Float[t.Tensor, "n_tokens dict_size"] | Tuple[
+        Float[t.Tensor, "n_tokens dict_size"],
+        Int[t.Tensor, "n_tokens s"],
+        Float[t.Tensor, "n_tokens dict_size"]
+    ]:
         """
         Encode using matching pursuit algorithm.
 
         Args:
-            x: Input activations of shape (batch, activation_dim)
+            x: Input activations of shape (n_tokens, activation_dim)
             return_info: If True, return additional information for training
 
         Returns:
-            If return_info=False: Sparse codes of shape (batch, dict_size)
+            If return_info=False: Sparse codes of shape (n_tokens, dict_size)
             If return_info=True: (sparse_codes, selected_indices, initial_acts)
         """
         batch_size = x.shape[0]
@@ -138,11 +153,18 @@ class MatchingPursuitAutoEncoder(Dictionary, nn.Module):
         else:
             return z
 
-    def decode(self, x: t.Tensor) -> t.Tensor:
+    def decode(
+        self, x: Float[t.Tensor, "n_tokens dict_size"]
+    ) -> Float[t.Tensor, "n_tokens activation_dim"]:
         """Standard linear decode."""
         return self.decoder(x) + self.b_dec
 
-    def forward(self, x: t.Tensor, output_features: bool = False):
+    def forward(
+        self, x: Float[t.Tensor, "n_tokens activation_dim"], output_features: bool = False
+    ) -> Float[t.Tensor, "n_tokens activation_dim"] | Tuple[
+        Float[t.Tensor, "n_tokens activation_dim"],
+        Float[t.Tensor, "n_tokens dict_size"]
+    ]:
         encoded_acts = self.encode(x)
         x_hat = self.decode(encoded_acts)
         if not output_features:
@@ -209,12 +231,14 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
 
         self.b_dec = nn.Parameter(t.zeros(activation_dim))
 
-    def encode(self, x: t.Tensor):
+    def encode(
+        self, x: Float[t.Tensor, "n_tokens activation_dim"]
+    ) -> Float[t.Tensor, "n_tokens dict_size"]:
         """
         Standard encode for backward compatibility - returns sparse code for max_s.
 
         Args:
-            x: Input activations of shape (batch, activation_dim)
+            x: Input activations of shape (n_tokens, activation_dim)
 
         Returns:
             Tensor of sparse_codes for max_s
@@ -260,12 +284,14 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
             z.scatter_add_(-1, idx, coeff)
         return z
 
-    def encode_nested(self, x: t.Tensor):
+    def encode_nested(
+        self, x: Float[t.Tensor, "n_tokens activation_dim"]
+    ) -> Dict[int, Float[t.Tensor, "n_tokens dict_size"]]:
         """
         Encode with all nested S values.
 
         Args:
-            x: Input activations of shape (batch, activation_dim)
+            x: Input activations of shape (n_tokens, activation_dim)
 
         Returns:
             Dict[int, Tensor] mapping s -> sparse_codes
@@ -316,7 +342,14 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
 
         return nested_codes
 
-    def encode_with_info(self, x: t.Tensor):
+    def encode_with_info(
+        self, x: Float[t.Tensor, "n_tokens activation_dim"]
+    ) -> Tuple[
+        Dict[int, Float[t.Tensor, "n_tokens dict_size"]],
+        Int[t.Tensor, "n_tokens max_s"],
+        Float[t.Tensor, "n_tokens max_s"],
+        Float[t.Tensor, "n_tokens dict_size"]
+    ]:
         """
         Encode with additional info for training.
 
@@ -372,11 +405,18 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
 
         return nested_codes, selected_indices, selected_coeffs, initial_acts
 
-    def decode(self, x: t.Tensor) -> t.Tensor:
+    def decode(
+        self, x: Float[t.Tensor, "n_tokens dict_size"]
+    ) -> Float[t.Tensor, "n_tokens activation_dim"]:
         """Standard linear decode."""
         return self.decoder(x) + self.b_dec
 
-    def forward(self, x: t.Tensor, output_features: bool = False):
+    def forward(
+        self, x: Float[t.Tensor, "n_tokens activation_dim"], output_features: bool = False
+    ) -> Float[t.Tensor, "n_tokens activation_dim"] | Tuple[
+        Float[t.Tensor, "n_tokens activation_dim"],
+        Float[t.Tensor, "n_tokens dict_size"]
+    ]:
         # For forward pass, use max_s by default
         z = self.encode(x)
         x_hat = self.decode(z)
@@ -515,7 +555,11 @@ class MatchingPursuitTrainer(SAETrainer):
         # Update in-place
         self.ae.S.fill_(int(annealed_value))
 
-    def get_auxiliary_loss(self, residual: t.Tensor, initial_acts: t.Tensor):
+    def get_auxiliary_loss(
+        self,
+        residual: Float[t.Tensor, "n_tokens activation_dim"],
+        initial_acts: Float[t.Tensor, "n_tokens dict_size"]
+    ) -> Float[t.Tensor, ""]:
         """
         Compute auxiliary loss for dead features.
 
@@ -569,7 +613,12 @@ class MatchingPursuitTrainer(SAETrainer):
             self.pre_norm_auxk_loss = -1
             return t.tensor(0, dtype=residual.dtype, device=residual.device)
 
-    def loss(self, x, step=None, logging=False):
+    def loss(
+        self,
+        x: Float[t.Tensor, "n_tokens activation_dim"],
+        step=None,
+        logging=False
+    ) -> Float[t.Tensor, ""]:
         """Compute the loss for training."""
         # Run the SAE
         f, selected_indices, initial_acts = self.ae.encode(x, return_info=True)
@@ -615,7 +664,9 @@ class MatchingPursuitTrainer(SAETrainer):
                 },
             )
 
-    def update(self, step, x):
+    def update(
+        self, step: int, x: Float[t.Tensor, "n_tokens activation_dim"]
+    ) -> float:
         """Perform a training update step."""
         # Initialize the decoder bias
         if step == 0:
@@ -762,7 +813,11 @@ class NestedMatchingPursuitTrainer(SAETrainer):
         lr_fn = get_lr_schedule(steps, warmup_steps, decay_start=decay_start)
         self.scheduler = t.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lr_fn)
 
-    def get_auxiliary_loss(self, residual: t.Tensor, initial_acts: t.Tensor):
+    def get_auxiliary_loss(
+        self,
+        residual: Float[t.Tensor, "n_tokens activation_dim"],
+        initial_acts: Float[t.Tensor, "n_tokens dict_size"]
+    ) -> Float[t.Tensor, ""]:
         """
         Compute auxiliary loss for dead features.
 
@@ -816,7 +871,12 @@ class NestedMatchingPursuitTrainer(SAETrainer):
             self.pre_norm_auxk_loss = -1
             return t.tensor(0, dtype=residual.dtype, device=residual.device)
 
-    def loss(self, x, step=None, logging=False):
+    def loss(
+        self,
+        x: Float[t.Tensor, "n_tokens activation_dim"],
+        step=None,
+        logging=False
+    ) -> Float[t.Tensor, ""]:
         """Compute nested loss for all S values."""
         # Get nested sparse codes and auxiliary info
         nested_codes, selected_indices, selected_coeffs, initial_acts = self.ae.encode_with_info(x)
@@ -878,7 +938,9 @@ class NestedMatchingPursuitTrainer(SAETrainer):
                 },
             )
 
-    def update(self, step, x):
+    def update(
+        self, step: int, x: Float[t.Tensor, "n_tokens activation_dim"]
+    ) -> float:
         """Perform a training update step."""
         # Initialize the decoder bias
         if step == 0:
