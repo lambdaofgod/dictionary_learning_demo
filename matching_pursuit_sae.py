@@ -28,7 +28,7 @@ from dictionary_learning.dictionary_learning.trainers.trainer import (
 def geometric_median(
     points: Float[t.Tensor, "n_tokens activation_dim"],
     max_iter: int = 100,
-    tol: float = 1e-5
+    tol: float = 1e-5,
 ) -> Float[t.Tensor, "activation_dim"]:
     """Compute the geometric median `points`. Used for initializing decoder bias."""
     # Initialize our guess as the mean of the points
@@ -85,14 +85,15 @@ class MatchingPursuitAutoEncoder(Dictionary, nn.Module):
         self.b_dec = nn.Parameter(t.zeros(activation_dim))
 
     def encode(
-        self,
-        x: Float[t.Tensor, "n_tokens activation_dim"],
-        return_info: bool = False
-    ) -> Float[t.Tensor, "n_tokens dict_size"] | Tuple[
-        Float[t.Tensor, "n_tokens dict_size"],
-        Int[t.Tensor, "n_tokens s"],
+        self, x: Float[t.Tensor, "n_tokens activation_dim"], return_info: bool = False
+    ) -> (
         Float[t.Tensor, "n_tokens dict_size"]
-    ]:
+        | Tuple[
+            Float[t.Tensor, "n_tokens dict_size"],
+            Int[t.Tensor, "n_tokens s"],
+            Float[t.Tensor, "n_tokens dict_size"],
+        ]
+    ):
         """
         Encode using matching pursuit algorithm.
 
@@ -110,43 +111,42 @@ class MatchingPursuitAutoEncoder(Dictionary, nn.Module):
         r = x - self.b_dec  # (batch, activation_dim)
 
         # Initialize sparse code
-        z = t.zeros(
-            batch_size, self.dict_size,
-            device=x.device, dtype=x.dtype
-        )
+        z = t.zeros(batch_size, self.dict_size, device=x.device, dtype=self.decoder.weight.dtype)
 
         # Track selected indices for each batch element at each step
         selected_indices = t.zeros(
-            batch_size, self.S.item(),
-            device=x.device, dtype=t.long
+            batch_size, self.S.item(), device=x.device, dtype=t.long
         )
 
         # Store initial activations (before iterative selection)
         initial_acts = (x - self.b_dec) @ self.decoder.weight
 
-        # Matching pursuit iterations
-        for step in range(self.S.item()):
-            # Compute correlations: r @ W_decoder
-            # Note: decoder.weight is stored as (activation_dim, dict_size) in nn.Linear
-            correlations = r @ self.decoder.weight  # (batch, dict_size)
+        with t.no_grad():
+            # Matching pursuit iterations
+            for step in range(self.S.item()):
+                # Compute correlations: r @ W_decoder
+                # Note: decoder.weight is stored as (activation_dim, dict_size) in nn.Linear
+                correlations = r @ self.decoder.weight  # (batch, dict_size)
 
-            # Find feature with maximum absolute correlation per position
-            j = t.argmax(correlations.abs(), dim=-1)  # (batch,)
-            selected_indices[:, step] = j
+                # Find feature with maximum absolute correlation per position
+                j = t.argmax(correlations.abs(), dim=-1)  # (batch,)
+                selected_indices[:, step] = j
 
-            # Extract correlation values for selected features
-            # We need to gather along the last dimension
-            j_expanded = j.unsqueeze(-1)  # (batch, 1)
-            z_t = t.gather(correlations, -1, j_expanded).squeeze(-1)  # (batch,)
+                # Extract correlation values for selected features
+                # We need to gather along the last dimension
+                j_expanded = j.unsqueeze(-1)  # (batch, 1)
+                z_t = t.gather(correlations, -1, j_expanded).squeeze(-1)  # (batch,)
 
-            # Update sparse code: accumulate selected features
-            # We scatter_add to handle cases where same feature is selected multiple times
-            z.scatter_add_(-1, j_expanded, z_t.unsqueeze(-1))
+                # Update sparse code: accumulate selected features
+                # We scatter_add to handle cases where same feature is selected multiple times
+                # Ensure dtype consistency
+                z_t_expanded = z_t.unsqueeze(-1).to(z.dtype)
+                z.scatter_add_(-1, j_expanded, z_t_expanded)
 
-            # Update residual: r = r - z_t * W_dec[j]
-            # Need to select the right dictionary elements for each position
-            selected_dict = self.decoder.weight.T[j]  # (batch, activation_dim)
-            r = r - z_t.unsqueeze(-1) * selected_dict
+                # Update residual: r = r - z_t * W_dec[j]
+                # Need to select the right dictionary elements for each position
+                selected_dict = self.decoder.weight.T[j]  # (batch, activation_dim)
+                r = r - z_t.unsqueeze(-1) * selected_dict
 
         if return_info:
             return z, selected_indices, initial_acts
@@ -160,11 +160,16 @@ class MatchingPursuitAutoEncoder(Dictionary, nn.Module):
         return self.decoder(x) + self.b_dec
 
     def forward(
-        self, x: Float[t.Tensor, "n_tokens activation_dim"], output_features: bool = False
-    ) -> Float[t.Tensor, "n_tokens activation_dim"] | Tuple[
-        Float[t.Tensor, "n_tokens activation_dim"],
-        Float[t.Tensor, "n_tokens dict_size"]
-    ]:
+        self,
+        x: Float[t.Tensor, "n_tokens activation_dim"],
+        output_features: bool = False,
+    ) -> (
+        Float[t.Tensor, "n_tokens activation_dim"]
+        | Tuple[
+            Float[t.Tensor, "n_tokens activation_dim"],
+            Float[t.Tensor, "n_tokens dict_size"],
+        ]
+    ):
         encoded_acts = self.encode(x)
         x_hat = self.decode(encoded_acts)
         if not output_features:
@@ -216,8 +221,9 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
         self.dict_size = dict_size
 
         # Validate and sort S values
-        assert all(isinstance(s, int) and s > 0 for s in s_values), \
-            "All s values must be positive integers"
+        assert all(
+            isinstance(s, int) and s > 0 for s in s_values
+        ), "All s values must be positive integers"
         self.s_values = sorted(s_values)  # Ensure ascending order
         self.max_s = max(self.s_values)
 
@@ -250,12 +256,10 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
 
         # Track selected indices and coefficients at each step
         selected_indices = t.zeros(
-            batch_size, self.max_s,
-            device=x.device, dtype=t.long
+            batch_size, self.max_s, device=x.device, dtype=t.long
         )
         selected_coeffs = t.zeros(
-            batch_size, self.max_s,
-            device=x.device, dtype=x.dtype
+            batch_size, self.max_s, device=x.device, dtype=self.decoder.weight.dtype
         )
 
         # Matching pursuit iterations for max_s steps
@@ -277,10 +281,10 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
             r = r - z_t.unsqueeze(-1) * selected_dict
 
         # Return max_s sparse code
-        z = t.zeros(batch_size, self.dict_size, device=x.device, dtype=x.dtype)
+        z = t.zeros(batch_size, self.dict_size, device=x.device, dtype=self.decoder.weight.dtype)
         for i in range(self.max_s):
-            idx = selected_indices[:, i:i+1]
-            coeff = selected_coeffs[:, i:i+1]
+            idx = selected_indices[:, i : i + 1]
+            coeff = selected_coeffs[:, i : i + 1].to(z.dtype)  # Ensure dtype consistency
             z.scatter_add_(-1, idx, coeff)
         return z
 
@@ -303,12 +307,10 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
 
         # Track selected indices and coefficients at each step
         selected_indices = t.zeros(
-            batch_size, self.max_s,
-            device=x.device, dtype=t.long
+            batch_size, self.max_s, device=x.device, dtype=t.long
         )
         selected_coeffs = t.zeros(
-            batch_size, self.max_s,
-            device=x.device, dtype=x.dtype
+            batch_size, self.max_s, device=x.device, dtype=self.decoder.weight.dtype
         )
 
         # Matching pursuit iterations for max_s steps
@@ -332,23 +334,21 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
         # Create nested sparse codes for each S value
         nested_codes = {}
         for s in self.s_values:
-            z_s = t.zeros(batch_size, self.dict_size, device=x.device, dtype=x.dtype)
+            z_s = t.zeros(batch_size, self.dict_size, device=x.device, dtype=self.decoder.weight.dtype)
             # Accumulate first s selections
             for i in range(s):
-                idx = selected_indices[:, i:i+1]
-                coeff = selected_coeffs[:, i:i+1]
+                idx = selected_indices[:, i : i + 1]
+                coeff = selected_coeffs[:, i : i + 1].to(z_s.dtype)  # Ensure dtype consistency
                 z_s.scatter_add_(-1, idx, coeff)
             nested_codes[s] = z_s
 
         return nested_codes
 
-    def encode_with_info(
-        self, x: Float[t.Tensor, "n_tokens activation_dim"]
-    ) -> Tuple[
+    def encode_with_info(self, x: Float[t.Tensor, "n_tokens activation_dim"]) -> Tuple[
         Dict[int, Float[t.Tensor, "n_tokens dict_size"]],
         Int[t.Tensor, "n_tokens max_s"],
         Float[t.Tensor, "n_tokens max_s"],
-        Float[t.Tensor, "n_tokens dict_size"]
+        Float[t.Tensor, "n_tokens dict_size"],
     ]:
         """
         Encode with additional info for training.
@@ -363,12 +363,10 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
 
         # Track selected indices and coefficients at each step
         selected_indices = t.zeros(
-            batch_size, self.max_s,
-            device=x.device, dtype=t.long
+            batch_size, self.max_s, device=x.device, dtype=t.long
         )
         selected_coeffs = t.zeros(
-            batch_size, self.max_s,
-            device=x.device, dtype=x.dtype
+            batch_size, self.max_s, device=x.device, dtype=self.decoder.weight.dtype
         )
 
         # Store initial activations for auxiliary loss
@@ -395,11 +393,11 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
         # Create nested sparse codes for each S value
         nested_codes = {}
         for s in self.s_values:
-            z_s = t.zeros(batch_size, self.dict_size, device=x.device, dtype=x.dtype)
+            z_s = t.zeros(batch_size, self.dict_size, device=x.device, dtype=self.decoder.weight.dtype)
             # Accumulate first s selections
             for i in range(s):
-                idx = selected_indices[:, i:i+1]
-                coeff = selected_coeffs[:, i:i+1]
+                idx = selected_indices[:, i : i + 1]
+                coeff = selected_coeffs[:, i : i + 1].to(z_s.dtype)  # Ensure dtype consistency
                 z_s.scatter_add_(-1, idx, coeff)
             nested_codes[s] = z_s
 
@@ -412,11 +410,16 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
         return self.decoder(x) + self.b_dec
 
     def forward(
-        self, x: Float[t.Tensor, "n_tokens activation_dim"], output_features: bool = False
-    ) -> Float[t.Tensor, "n_tokens activation_dim"] | Tuple[
-        Float[t.Tensor, "n_tokens activation_dim"],
-        Float[t.Tensor, "n_tokens dict_size"]
-    ]:
+        self,
+        x: Float[t.Tensor, "n_tokens activation_dim"],
+        output_features: bool = False,
+    ) -> (
+        Float[t.Tensor, "n_tokens activation_dim"]
+        | Tuple[
+            Float[t.Tensor, "n_tokens activation_dim"],
+            Float[t.Tensor, "n_tokens dict_size"],
+        ]
+    ):
         # For forward pass, use max_s by default
         z = self.encode(x)
         x_hat = self.decode(z)
@@ -446,7 +449,9 @@ class NestedMatchingPursuitAutoEncoder(Dictionary, nn.Module):
             if sorted(s_values) != sorted(saved_s):
                 raise ValueError(f"s_values={s_values} != saved s_values={saved_s}")
 
-        autoencoder = NestedMatchingPursuitAutoEncoder(activation_dim, dict_size, s_values)
+        autoencoder = NestedMatchingPursuitAutoEncoder(
+            activation_dim, dict_size, s_values
+        )
         autoencoder.load_state_dict(state_dict)
         if device is not None:
             autoencoder.to(device)
@@ -542,9 +547,9 @@ class MatchingPursuitTrainer(SAETrainer):
         if s_anneal_steps is None:
             return
 
-        assert 0 <= s_anneal_steps < self.steps, (
-            "s_anneal_steps must be >= 0 and < steps."
-        )
+        assert (
+            0 <= s_anneal_steps < self.steps
+        ), "s_anneal_steps must be >= 0 and < steps."
         # self.s is the target S set for the trainer, not the dictionary's current S
         assert activation_dim > self.s, "activation_dim must be greater than s"
 
@@ -558,7 +563,7 @@ class MatchingPursuitTrainer(SAETrainer):
     def get_auxiliary_loss(
         self,
         residual: Float[t.Tensor, "n_tokens activation_dim"],
-        initial_acts: Float[t.Tensor, "n_tokens dict_size"]
+        initial_acts: Float[t.Tensor, "n_tokens dict_size"],
     ) -> Float[t.Tensor, ""]:
         """
         Compute auxiliary loss for dead features.
@@ -591,18 +596,13 @@ class MatchingPursuitTrainer(SAETrainer):
             # Note: decoder(), not decode(), as we don't want to apply the bias
             x_reconstruct_aux = self.ae.decoder(auxk_acts_full)
             l2_loss_aux = (
-                (residual.float() - x_reconstruct_aux.float())
-                .pow(2)
-                .sum(dim=-1)
-                .mean()
+                (residual.float() - x_reconstruct_aux.float()).pow(2).sum(dim=-1).mean()
             )
 
             self.pre_norm_auxk_loss = l2_loss_aux
 
             # Normalization similar to OpenAI implementation
-            residual_mu = residual.mean(dim=0)[None, :].broadcast_to(
-                residual.shape
-            )
+            residual_mu = residual.mean(dim=0)[None, :].broadcast_to(residual.shape)
             loss_denom = (
                 (residual.float() - residual_mu.float()).pow(2).sum(dim=-1).mean()
             )
@@ -614,10 +614,7 @@ class MatchingPursuitTrainer(SAETrainer):
             return t.tensor(0, dtype=residual.dtype, device=residual.device)
 
     def loss(
-        self,
-        x: Float[t.Tensor, "n_tokens activation_dim"],
-        step=None,
-        logging=False
+        self, x: Float[t.Tensor, "n_tokens activation_dim"], step=None, logging=False
     ) -> Float[t.Tensor, ""]:
         """Compute the loss for training."""
         # Run the SAE
@@ -659,14 +656,16 @@ class MatchingPursuitTrainer(SAETrainer):
                 f,
                 {
                     "l2_loss": l2_loss.item(),
-                    "auxk_loss": auxk_loss.item() if isinstance(auxk_loss, t.Tensor) else auxk_loss,
+                    "auxk_loss": (
+                        auxk_loss.item()
+                        if isinstance(auxk_loss, t.Tensor)
+                        else auxk_loss
+                    ),
                     "loss": loss.item(),
                 },
             )
 
-    def update(
-        self, step: int, x: Float[t.Tensor, "n_tokens activation_dim"]
-    ) -> float:
+    def update(self, step: int, x: Float[t.Tensor, "n_tokens activation_dim"]) -> float:
         """Perform a training update step."""
         # Initialize the decoder bias
         if step == 0:
@@ -769,8 +768,9 @@ class NestedMatchingPursuitTrainer(SAETrainer):
         if s_weights is None:
             self.s_weights = [1.0 / len(s_values)] * len(s_values)
         else:
-            assert len(s_weights) == len(s_values), \
-                "s_weights must have same length as s_values"
+            assert len(s_weights) == len(
+                s_values
+            ), "s_weights must have same length as s_values"
             self.s_weights = s_weights
 
         if seed is not None:
@@ -816,7 +816,7 @@ class NestedMatchingPursuitTrainer(SAETrainer):
     def get_auxiliary_loss(
         self,
         residual: Float[t.Tensor, "n_tokens activation_dim"],
-        initial_acts: Float[t.Tensor, "n_tokens dict_size"]
+        initial_acts: Float[t.Tensor, "n_tokens dict_size"],
     ) -> Float[t.Tensor, ""]:
         """
         Compute auxiliary loss for dead features.
@@ -849,18 +849,13 @@ class NestedMatchingPursuitTrainer(SAETrainer):
             # Note: decoder(), not decode(), as we don't want to apply the bias
             x_reconstruct_aux = self.ae.decoder(auxk_acts_full)
             l2_loss_aux = (
-                (residual.float() - x_reconstruct_aux.float())
-                .pow(2)
-                .sum(dim=-1)
-                .mean()
+                (residual.float() - x_reconstruct_aux.float()).pow(2).sum(dim=-1).mean()
             )
 
             self.pre_norm_auxk_loss = l2_loss_aux
 
             # Normalization similar to OpenAI implementation
-            residual_mu = residual.mean(dim=0)[None, :].broadcast_to(
-                residual.shape
-            )
+            residual_mu = residual.mean(dim=0)[None, :].broadcast_to(residual.shape)
             loss_denom = (
                 (residual.float() - residual_mu.float()).pow(2).sum(dim=-1).mean()
             )
@@ -872,14 +867,13 @@ class NestedMatchingPursuitTrainer(SAETrainer):
             return t.tensor(0, dtype=residual.dtype, device=residual.device)
 
     def loss(
-        self,
-        x: Float[t.Tensor, "n_tokens activation_dim"],
-        step=None,
-        logging=False
+        self, x: Float[t.Tensor, "n_tokens activation_dim"], step=None, logging=False
     ) -> Float[t.Tensor, ""]:
         """Compute nested loss for all S values."""
         # Get nested sparse codes and auxiliary info
-        nested_codes, selected_indices, selected_coeffs, initial_acts = self.ae.encode_with_info(x)
+        nested_codes, selected_indices, selected_coeffs, initial_acts = (
+            self.ae.encode_with_info(x)
+        )
 
         # Compute loss for each S value
         total_loss = 0.0
@@ -933,14 +927,16 @@ class NestedMatchingPursuitTrainer(SAETrainer):
                 nested_codes[self.ae.max_s],
                 {
                     "l2_losses": l2_losses,
-                    "auxk_loss": auxk_loss.item() if isinstance(auxk_loss, t.Tensor) else auxk_loss,
+                    "auxk_loss": (
+                        auxk_loss.item()
+                        if isinstance(auxk_loss, t.Tensor)
+                        else auxk_loss
+                    ),
                     "loss": loss.item(),
                 },
             )
 
-    def update(
-        self, step: int, x: Float[t.Tensor, "n_tokens activation_dim"]
-    ) -> float:
+    def update(self, step: int, x: Float[t.Tensor, "n_tokens activation_dim"]) -> float:
         """Perform a training update step."""
         # Initialize the decoder bias
         if step == 0:
