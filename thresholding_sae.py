@@ -26,9 +26,7 @@ from dictionary_learning.dictionary_learning.trainers.trainer import (
 
 @t.no_grad()
 def geometric_median(
-    points: Float[t.Tensor, "n_points dim"],
-    max_iter: int = 100,
-    tol: float = 1e-5
+    points: Float[t.Tensor, "n_points dim"], max_iter: int = 100, tol: float = 1e-5
 ) -> Float[t.Tensor, "dim"]:
     """Compute the geometric median `points`. Used for initializing decoder bias."""
     # Initialize our guess as the mean of the points
@@ -89,7 +87,7 @@ class ThresholdingAutoEncoderTopK(Dictionary, nn.Module):
         self,
         x: Float[t.Tensor, "n_tokens activation_dim"],
         return_topk: bool = False,
-        use_threshold: bool = False
+        use_threshold: bool = False,
     ) -> Union[
         Float[t.Tensor, "n_tokens dict_size"],
         Tuple[
@@ -106,9 +104,7 @@ class ThresholdingAutoEncoderTopK(Dictionary, nn.Module):
 
         if use_threshold:
             # Apply threshold based on absolute values
-            encoded_acts_BF = feat_acts_BF * (
-                t.abs(feat_acts_BF) > self.threshold
-            )
+            encoded_acts_BF = feat_acts_BF * (t.abs(feat_acts_BF) > self.threshold)
             if return_topk:
                 # Get top-k based on absolute values
                 abs_acts_BF = t.abs(feat_acts_BF)
@@ -143,16 +139,21 @@ class ThresholdingAutoEncoderTopK(Dictionary, nn.Module):
         else:
             return encoded_acts_BF
 
-    def decode(self, x: Float[t.Tensor, "n_tokens dict_size"]) -> Float[t.Tensor, "n_tokens activation_dim"]:
+    def decode(
+        self, x: Float[t.Tensor, "n_tokens dict_size"]
+    ) -> Float[t.Tensor, "n_tokens activation_dim"]:
         return self.decoder(x) + self.b_dec
 
     def forward(
         self,
         x: Float[t.Tensor, "n_tokens activation_dim"],
-        output_features: bool = False
+        output_features: bool = False,
     ) -> Union[
         Float[t.Tensor, "n_tokens activation_dim"],
-        Tuple[Float[t.Tensor, "n_tokens activation_dim"], Float[t.Tensor, "n_tokens dict_size"]]
+        Tuple[
+            Float[t.Tensor, "n_tokens activation_dim"],
+            Float[t.Tensor, "n_tokens dict_size"],
+        ],
     ]:
         encoded_acts_BF = self.encode(x)
         x_hat_BD = self.decode(encoded_acts_BF)
@@ -168,10 +169,7 @@ class ThresholdingAutoEncoderTopK(Dictionary, nn.Module):
 
     @classmethod
     def from_pretrained(
-        cls,
-        path: str,
-        k: Optional[int] = None,
-        device: Optional[str] = None
+        cls, path: str, k: Optional[int] = None, device: Optional[str] = None
     ) -> "ThresholdingAutoEncoderTopK":
         """
         Load a pretrained autoencoder from a file.
@@ -195,13 +193,15 @@ class ThresholdingAutoEncoderTopK(Dictionary, nn.Module):
             raise ValueError(f"k={k} != {state_dict['k'].item()}=state_dict['k']")
 
         autoencoder = ThresholdingAutoEncoderTopK(activation_dim, dict_size, k)
-        autoencoder.load_state_dict(state_dict, strict=False)  # Allow missing encoder keys
+        autoencoder.load_state_dict(
+            state_dict, strict=False
+        )  # Allow missing encoder keys
         if device is not None:
             autoencoder.to(device)
         return autoencoder
 
 
-class NestedThresholdingAutoEncoderTopK(Dictionary, nn.Module):
+class NestedThresholdingAutoEncoderTopK(ThresholdingAutoEncoderTopK):
     """
     Nested hard thresholding top-k autoencoder using a single decoder matrix.
 
@@ -214,27 +214,22 @@ class NestedThresholdingAutoEncoderTopK(Dictionary, nn.Module):
     """
 
     def __init__(self, activation_dim: int, dict_size: int, k_values: list[int]):
-        super().__init__()
-        self.activation_dim = activation_dim
-        self.dict_size = dict_size
-
         # Validate and sort k values
-        assert all(isinstance(k, int) and k > 0 for k in k_values), \
-            "All k values must be positive integers"
+        assert all(
+            isinstance(k, int) and k > 0 for k in k_values
+        ), "All k values must be positive integers"
         self.k_values = sorted(k_values)  # Ensure ascending order
         self.max_k = max(self.k_values)
-
-        # Store as buffers for device handling
+        
+        # Call parent init with max_k
+        super().__init__(activation_dim, dict_size, self.max_k)
+        
+        # Store k_values as buffer for device handling
         self.register_buffer("k_tensor", t.tensor(self.k_values, dtype=t.int))
 
-        self.decoder = nn.Linear(dict_size, activation_dim, bias=False)
-        self.decoder.weight.data = set_decoder_norm_to_unit_norm(
-            self.decoder.weight, activation_dim, dict_size
-        )
-
-        self.b_dec = nn.Parameter(t.zeros(activation_dim))
-
-    def encode(self, x: Float[t.Tensor, "n_tokens activation_dim"]) -> Float[t.Tensor, "n_tokens dict_size"]:
+    def encode(
+        self, x: Float[t.Tensor, "n_tokens activation_dim"]
+    ) -> Float[t.Tensor, "n_tokens dict_size"]:
         """
         Standard encode for backward compatibility - returns encoding for max_k.
 
@@ -262,7 +257,9 @@ class NestedThresholdingAutoEncoderTopK(Dictionary, nn.Module):
         )
         return encoded_acts_BF
 
-    def encode_nested(self, x: Float[t.Tensor, "n_tokens activation_dim"]) -> Dict[int, Float[t.Tensor, "n_tokens dict_size"]]:
+    def encode_nested(
+        self, x: Float[t.Tensor, "n_tokens activation_dim"]
+    ) -> Dict[int, Float[t.Tensor, "n_tokens dict_size"]]:
         """
         Encode with all nested k values.
 
@@ -291,19 +288,14 @@ class NestedThresholdingAutoEncoderTopK(Dictionary, nn.Module):
             k_acts = top_acts_BK[:, :k]
 
             buffer_BF = t.zeros_like(feat_acts_BF)
-            encoded_acts_k = buffer_BF.scatter_(
-                dim=-1, index=k_indices, src=k_acts
-            )
+            encoded_acts_k = buffer_BF.scatter_(dim=-1, index=k_indices, src=k_acts)
             nested_encodings[k] = encoded_acts_k
 
         return nested_encodings
 
-    def encode_with_info(
-        self,
-        x: Float[t.Tensor, "n_tokens activation_dim"]
-    ) -> Tuple[
+    def encode_with_info(self, x: Float[t.Tensor, "n_tokens activation_dim"]) -> Tuple[
         Dict[int, Float[t.Tensor, "n_tokens dict_size"]],
-        Float[t.Tensor, "n_tokens dict_size"]
+        Float[t.Tensor, "n_tokens dict_size"],
     ]:
         """
         Encode with additional info for training.
@@ -315,25 +307,6 @@ class NestedThresholdingAutoEncoderTopK(Dictionary, nn.Module):
         nested_encodings = self.encode_nested(x)
         return nested_encodings, feat_acts_BF
 
-    def decode(self, x: Float[t.Tensor, "n_tokens dict_size"]) -> Float[t.Tensor, "n_tokens activation_dim"]:
-        return self.decoder(x) + self.b_dec
-
-    def forward(
-        self,
-        x: Float[t.Tensor, "n_tokens activation_dim"],
-        output_features: bool = False
-    ) -> Union[
-        Float[t.Tensor, "n_tokens activation_dim"],
-        Tuple[Float[t.Tensor, "n_tokens activation_dim"], Float[t.Tensor, "n_tokens dict_size"]]
-    ]:
-        # For forward pass, use max_k by default
-        encoded_acts_BF = self.encode(x)
-        x_hat_BD = self.decode(encoded_acts_BF)
-        if not output_features:
-            return x_hat_BD
-        else:
-            return x_hat_BD, encoded_acts_BF
-
     def scale_biases(self, scale: float) -> None:
         self.b_dec.data *= scale
 
@@ -342,7 +315,7 @@ class NestedThresholdingAutoEncoderTopK(Dictionary, nn.Module):
         cls,
         path: str,
         k_values: Optional[list[int]] = None,
-        device: Optional[str] = None
+        device: Optional[str] = None,
     ) -> "NestedThresholdingAutoEncoderTopK":
         """
         Load a pretrained nested autoencoder from a file.
@@ -359,7 +332,9 @@ class NestedThresholdingAutoEncoderTopK(Dictionary, nn.Module):
             if sorted(k_values) != sorted(saved_k):
                 raise ValueError(f"k_values={k_values} != saved k_values={saved_k}")
 
-        autoencoder = NestedThresholdingAutoEncoderTopK(activation_dim, dict_size, k_values)
+        autoencoder = NestedThresholdingAutoEncoderTopK(
+            activation_dim, dict_size, k_values
+        )
         autoencoder.load_state_dict(state_dict)
         if device is not None:
             autoencoder.to(device)
@@ -389,7 +364,6 @@ class ThresholdingTopKTrainer(SAETrainer):
         decay_start: Optional[int] = None,  # when does the lr decay start
         threshold_beta: float = 0.999,
         threshold_start_step: int = 1000,
-        k_anneal_steps: Optional[int] = None,
         seed: Optional[int] = None,
         device: Optional[str] = None,
         wandb_name: str = "ThresholdingAutoEncoderTopK",
@@ -409,7 +383,6 @@ class ThresholdingTopKTrainer(SAETrainer):
         self.k = k
         self.threshold_beta = threshold_beta
         self.threshold_start_step = threshold_start_step
-        self.k_anneal_steps = k_anneal_steps
 
         if seed is not None:
             t.manual_seed(seed)
@@ -452,30 +425,10 @@ class ThresholdingTopKTrainer(SAETrainer):
 
         self.scheduler = t.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lr_fn)
 
-    def update_annealed_k(
-        self, step: int, activation_dim: int, k_anneal_steps: Optional[int] = None
-    ) -> None:
-        """Update k buffer in-place with annealed value"""
-        if k_anneal_steps is None:
-            return
-
-        assert 0 <= k_anneal_steps < self.steps, (
-            "k_anneal_steps must be >= 0 and < steps."
-        )
-        # self.k is the target k set for the trainer, not the dictionary's current k
-        assert activation_dim > self.k, "activation_dim must be greater than k"
-
-        step = min(step, k_anneal_steps)
-        ratio = step / k_anneal_steps
-        annealed_value = activation_dim * (1 - ratio) + self.k * ratio
-
-        # Update in-place
-        self.ae.k.fill_(int(annealed_value))
-
     def get_auxiliary_loss(
         self,
         residual_BD: Float[t.Tensor, "n_tokens activation_dim"],
-        feat_acts_BF: Float[t.Tensor, "n_tokens dict_size"]
+        feat_acts_BF: Float[t.Tensor, "n_tokens dict_size"],
     ) -> Float[t.Tensor, ""]:
         dead_features = self.num_tokens_since_fired >= self.dead_feature_threshold
         self.dead_features = int(dead_features.sum())
@@ -547,7 +500,7 @@ class ThresholdingTopKTrainer(SAETrainer):
         self,
         x: Float[t.Tensor, "n_tokens activation_dim"],
         step: Optional[int] = None,
-        logging: bool = False
+        logging: bool = False,
     ) -> Union[Float[t.Tensor, ""], namedtuple]:
         # Run the SAE
         f, top_acts_BK, top_indices_BK, feat_acts_BF = self.ae.encode(
@@ -620,7 +573,6 @@ class ThresholdingTopKTrainer(SAETrainer):
         self.optimizer.step()
         self.optimizer.zero_grad()
         self.scheduler.step()
-        self.update_annealed_k(step, self.ae.activation_dim, self.k_anneal_steps)
 
         # Make sure the decoder is still unit-norm
         self.ae.decoder.weight.data = set_decoder_norm_to_unit_norm(
@@ -653,7 +605,7 @@ class ThresholdingTopKTrainer(SAETrainer):
         }
 
 
-class NestedThresholdingTopKTrainer(SAETrainer):
+class NestedThresholdingTopKTrainer(ThresholdingTopKTrainer):
     """
     Nested hard thresholding Top-K SAE training scheme.
 
@@ -681,124 +633,63 @@ class NestedThresholdingTopKTrainer(SAETrainer):
         wandb_name: str = "NestedThresholdingAutoEncoderTopK",
         submodule_name: Optional[str] = None,
     ):
-        super().__init__(seed)
-
-        assert layer is not None and lm_name is not None
-        self.layer = layer
-        self.lm_name = lm_name
-        self.submodule_name = submodule_name
-
-        self.wandb_name = wandb_name
-        self.steps = steps
-        self.decay_start = decay_start
-        self.warmup_steps = warmup_steps
-        self.k_values = sorted(k_values)  # Ensure ascending order
-
+        # Ensure k_values are sorted and store them
+        self.k_values = sorted(k_values)
+        
         # Set default weights if not provided
         if k_weights is None:
             self.k_weights = [1.0 / len(k_values)] * len(k_values)
         else:
-            assert len(k_weights) == len(k_values), \
-                "k_weights must have same length as k_values"
+            assert len(k_weights) == len(
+                k_values
+            ), "k_weights must have same length as k_values"
             self.k_weights = k_weights
-
-        if seed is not None:
-            t.manual_seed(seed)
-            t.cuda.manual_seed_all(seed)
-
-        # Initialize autoencoder
+        
+        # Call parent init with max_k and base dict_class (will be replaced)
+        super().__init__(
+            steps=steps,
+            activation_dim=activation_dim,
+            dict_size=dict_size,
+            k=max(self.k_values),
+            layer=layer,
+            lm_name=lm_name,
+            dict_class=ThresholdingAutoEncoderTopK,  # Use base class for parent init
+            lr=lr,
+            auxk_alpha=auxk_alpha,
+            warmup_steps=warmup_steps,
+            decay_start=decay_start,
+            threshold_beta=0.999,  # Not used in nested, but required by parent
+            threshold_start_step=1000,  # Not used in nested, but required by parent
+            seed=seed,
+            device=device,
+            wandb_name=wandb_name,
+            submodule_name=submodule_name,
+        )
+        
+        # Override autoencoder with nested version
         self.ae = dict_class(activation_dim, dict_size, k_values)
-        if device is None:
-            self.device = "cuda" if t.cuda.is_available() else "cpu"
-        else:
-            self.device = device
         self.ae.to(self.device)
-
-        if lr is not None:
-            self.lr = lr
-        else:
-            # Auto-select LR using 1 / sqrt(d) scaling law from Figure 3 of the paper
-            scale = dict_size / (2**14)
-            self.lr = 2e-4 / scale**0.5
-
-        self.auxk_alpha = auxk_alpha
-        self.dead_feature_threshold = 10_000_000
-        self.top_k_aux = activation_dim // 2  # Heuristic from B.1 of the paper
-        self.num_tokens_since_fired = t.zeros(dict_size, dtype=t.long, device=device)
+        
+        # Override logging parameters for nested version
         self.logging_parameters = [
             "effective_l0_per_k",
             "dead_features",
             "pre_norm_auxk_loss",
         ]
         self.effective_l0_per_k = {k: -1 for k in k_values}
-        self.dead_features = -1
-        self.pre_norm_auxk_loss = -1
-
-        # Optimizer and scheduler
+        
+        # Re-initialize optimizer and scheduler with nested AE parameters
         self.optimizer = t.optim.Adam(
             self.ae.parameters(), lr=self.lr, betas=(0.9, 0.999)
         )
-
         lr_fn = get_lr_schedule(steps, warmup_steps, decay_start=decay_start)
         self.scheduler = t.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lr_fn)
-
-    def get_auxiliary_loss(
-        self,
-        residual_BD: Float[t.Tensor, "n_tokens activation_dim"],
-        feat_acts_BF: Float[t.Tensor, "n_tokens dict_size"]
-    ) -> Float[t.Tensor, ""]:
-        """Compute auxiliary loss for dead features."""
-        dead_features = self.num_tokens_since_fired >= self.dead_feature_threshold
-        self.dead_features = int(dead_features.sum())
-
-        if self.dead_features > 0:
-            k_aux = min(self.top_k_aux, self.dead_features)
-
-            # For hard thresholding, we work with absolute values for selection
-            abs_acts_BF = t.abs(feat_acts_BF)
-            auxk_latents = t.where(dead_features[None], abs_acts_BF, -t.inf)
-
-            # Top-k dead latents based on absolute values
-            auxk_abs_acts, auxk_indices = auxk_latents.topk(k_aux, sorted=False)
-
-            # Get the actual signed values at these indices
-            auxk_acts = feat_acts_BF.gather(-1, auxk_indices)
-
-            auxk_buffer_BF = t.zeros_like(feat_acts_BF)
-            auxk_acts_BF = auxk_buffer_BF.scatter_(
-                dim=-1, index=auxk_indices, src=auxk_acts
-            )
-
-            # Note: decoder(), not decode(), as we don't want to apply the bias
-            x_reconstruct_aux = self.ae.decoder(auxk_acts_BF)
-            l2_loss_aux = (
-                (residual_BD.float() - x_reconstruct_aux.float())
-                .pow(2)
-                .sum(dim=-1)
-                .mean()
-            )
-
-            self.pre_norm_auxk_loss = l2_loss_aux
-
-            # normalization from OpenAI implementation
-            residual_mu = residual_BD.mean(dim=0)[None, :].broadcast_to(
-                residual_BD.shape
-            )
-            loss_denom = (
-                (residual_BD.float() - residual_mu.float()).pow(2).sum(dim=-1).mean()
-            )
-            normalized_auxk_loss = l2_loss_aux / loss_denom
-
-            return normalized_auxk_loss.nan_to_num(0.0)
-        else:
-            self.pre_norm_auxk_loss = -1
-            return t.tensor(0, dtype=residual_BD.dtype, device=residual_BD.device)
 
     def loss(
         self,
         x: Float[t.Tensor, "n_tokens activation_dim"],
         step: Optional[int] = None,
-        logging: bool = False
+        logging: bool = False,
     ) -> Union[Float[t.Tensor, ""], namedtuple]:
         """Compute nested loss for all k values."""
         # Get nested encodings and initial activations
@@ -853,44 +744,14 @@ class NestedThresholdingTopKTrainer(SAETrainer):
                 nested_encodings[self.ae.max_k],
                 {
                     "l2_losses": l2_losses,
-                    "auxk_loss": auxk_loss.item() if isinstance(auxk_loss, t.Tensor) else auxk_loss,
+                    "auxk_loss": (
+                        auxk_loss.item()
+                        if isinstance(auxk_loss, t.Tensor)
+                        else auxk_loss
+                    ),
                     "loss": loss.item(),
                 },
             )
-
-    def update(self, step: int, x: Float[t.Tensor, "n_tokens activation_dim"]) -> float:
-        """Perform a training update step."""
-        # Initialize the decoder bias
-        if step == 0:
-            median = geometric_median(x)
-            median = median.to(self.ae.b_dec.dtype)
-            self.ae.b_dec.data = median
-
-        # Compute the loss
-        x = x.to(self.device)
-        loss = self.loss(x, step=step)
-        loss.backward()
-
-        # Clip grad norm and remove grads parallel to decoder directions
-        self.ae.decoder.weight.grad = remove_gradient_parallel_to_decoder_directions(
-            self.ae.decoder.weight,
-            self.ae.decoder.weight.grad,
-            self.ae.activation_dim,
-            self.ae.dict_size,
-        )
-        t.nn.utils.clip_grad_norm_(self.ae.parameters(), 1.0)
-
-        # Do a training step
-        self.optimizer.step()
-        self.optimizer.zero_grad()
-        self.scheduler.step()
-
-        # Make sure the decoder is still unit-norm
-        self.ae.decoder.weight.data = set_decoder_norm_to_unit_norm(
-            self.ae.decoder.weight, self.ae.activation_dim, self.ae.dict_size
-        )
-
-        return loss.item()
 
     @property
     def config(self):
@@ -913,4 +774,3 @@ class NestedThresholdingTopKTrainer(SAETrainer):
             "wandb_name": self.wandb_name,
             "submodule_name": self.submodule_name,
         }
-
