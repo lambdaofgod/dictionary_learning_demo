@@ -322,8 +322,21 @@ class NestedThresholdingAutoEncoderTopK(ThresholdingAutoEncoderTopK):
         """
         state_dict = t.load(path)
 
-        # Get dimensions from decoder
-        activation_dim, dict_size = state_dict["decoder.weight"].shape
+        # Get dimensions from decoder - try multiple possible keys
+        decoder_weight_key = None
+        for key in ["decoder.weight", "decoder._weight"]:
+            if key in state_dict:
+                decoder_weight_key = key
+                break
+        
+        if decoder_weight_key is None:
+            available_keys = [k for k in state_dict.keys() if 'decoder' in k]
+            raise KeyError(
+                f"Could not find decoder weight in state dict. "
+                f"Available decoder keys: {available_keys}"
+            )
+        
+        activation_dim, dict_size = state_dict[decoder_weight_key].shape
 
         if k_values is None:
             k_values = state_dict["k_tensor"].tolist()
@@ -335,7 +348,10 @@ class NestedThresholdingAutoEncoderTopK(ThresholdingAutoEncoderTopK):
         autoencoder = NestedThresholdingAutoEncoderTopK(
             activation_dim, dict_size, k_values
         )
-        autoencoder.load_state_dict(state_dict)
+        
+        # Use strict=False to allow missing keys (k, threshold) from old checkpoints
+        autoencoder.load_state_dict(state_dict, strict=False)
+        
         if device is not None:
             autoencoder.to(device)
         return autoencoder

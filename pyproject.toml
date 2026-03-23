@@ -29,6 +29,7 @@ dependencies = [
     "transformers>=4.47.1",
     "ipykernel",
     "trackio>=0.7.0",
+    "geoopt>=0.5.1",
 ]
 
 [tool.pyright]

@@ -29,6 +29,10 @@ from thresholding_sae import (
     NestedThresholdingAutoEncoderTopK,
     NestedThresholdingTopKTrainer,
 )
+from stiefel_sae import (
+    StiefelNestedThresholdingAutoEncoderTopK,
+    StiefelNestedThresholdingTopKTrainer,
+)
 from matching_pursuit_sae import (
     MatchingPursuitAutoEncoder,
     MatchingPursuitTrainer,
@@ -52,6 +56,7 @@ class TrainerType(Enum):
     Matryoshka_BATCH_TOP_K = "matryoshka_batch_top_k"
     THRESHOLDING_TOP_K = "thresholding_topk"
     NESTED_THRESHOLDING_TOP_K = "nested_thresholding_topk"
+    STIEFEL_NESTED_THRESHOLDING_TOP_K = "stiefel_nested_thresholding_topk"
     MATCHING_PURSUIT = "matching_pursuit"
 
 
@@ -71,14 +76,14 @@ class SparsityPenalties:
     gated: list[float]
 
 
-num_tokens = 50_000_000
+num_tokens = 200_000_000
 
 print(f"NOTE: Training on {num_tokens} tokens")
 
 eval_num_inputs = 200
 random_seeds = [0]
-dictionary_widths = [2**14, 2**16]
-# dictionary_widths = [2**14]
+# dictionary_widths = [2**14, 2**16]
+dictionary_widths = [2**14]  # , 2**16]
 
 WARMUP_STEPS = 100
 SPARSITY_WARMUP_STEPS = 500
@@ -87,7 +92,7 @@ K_ANNEAL_END_FRACTION = 0.01
 remove_bos = True
 max_activation_norm_multiple = 10
 
-learning_rates = [5e-5]
+learning_rates = [1e-4]
 
 
 wandb_project = "dictionary_learning_demo_sae_training"
@@ -480,6 +485,30 @@ def get_trainer_configs(
                 k_values=k_values,
                 k_weights=k_weights,
                 wandb_name=f"NestedThresholdingTopKTrainer-{model_name}-{submodule_name}",
+            )
+            trainer_configs.append(asdict(config))
+
+    if TrainerType.STIEFEL_NESTED_THRESHOLDING_TOP_K.value in architectures:
+        # Stiefel nested thresholding with manifold-constrained decoder weights
+        for seed, dict_size, learning_rate in itertools.product(
+            seeds, dict_sizes, learning_rates
+        ):
+            # Use all TARGET_L0s values for nested training
+            k_values = sorted(TARGET_L0s)
+
+            # Use uniform weights by default
+            k_weights = [1.0 / len(k_values)] * len(k_values)
+
+            config = NestedThresholdingTopKTrainerConfig(
+                **base_config,
+                trainer=StiefelNestedThresholdingTopKTrainer,
+                dict_class=StiefelNestedThresholdingAutoEncoderTopK,
+                lr=learning_rate,
+                dict_size=dict_size,
+                seed=seed,
+                k_values=k_values,
+                k_weights=k_weights,
+                wandb_name=f"StiefelNestedThresholdingTopKTrainer-{model_name}-{submodule_name}",
             )
             trainer_configs.append(asdict(config))
 
