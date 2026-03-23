@@ -10,9 +10,9 @@ from collections import namedtuple
 from typing import Optional, Dict, Tuple, Union
 from jaxtyping import Float, Int, Bool
 
-from dictionary_learning.dictionary_learning.config import DEBUG
-from dictionary_learning.dictionary_learning.dictionary import Dictionary
-from dictionary_learning.dictionary_learning.trainers.trainer import (
+from dictionary_learning.config import DEBUG
+from dictionary_learning.dictionary import Dictionary
+from dictionary_learning.trainers.trainer import (
     SAETrainer,
     get_lr_schedule,
     set_decoder_norm_to_unit_norm,

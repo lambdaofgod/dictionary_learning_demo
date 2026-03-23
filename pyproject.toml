@@ -30,7 +30,11 @@ dependencies = [
     "ipykernel",
     "trackio>=0.7.0",
     "geoopt>=0.5.1",
+    "dictionary-learning",
 ]
 
 [tool.pyright]
 typeCheckingMode = "standard"
+
+[tool.uv.sources]
+dictionary-learning = { git = "https://github.com/saprmarks/dictionary_learning.git", rev = "1d2737a" }

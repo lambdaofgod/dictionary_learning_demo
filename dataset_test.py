@@ -1,7 +1,7 @@
 from tqdm import tqdm
 from typing import Callable
 from transformers import AutoTokenizer
-from dictionary_learning.dictionary_learning.utils import (
+from dictionary_learning.utils import (
     hf_mixed_dataset_to_generator,
 )
 

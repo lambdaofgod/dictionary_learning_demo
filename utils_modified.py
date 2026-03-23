@@ -10,10 +10,10 @@ from transformers import AutoTokenizer
 import torch as t
 
 # Original imports from dictionary_learning package
-from dictionary_learning.dictionary_learning.trainers.top_k import AutoEncoderTopK
-from dictionary_learning.dictionary_learning.trainers.batch_top_k import BatchTopKSAE
-from dictionary_learning.dictionary_learning.trainers.matryoshka_batch_top_k import MatryoshkaBatchTopKSAE
-from dictionary_learning.dictionary_learning.dictionary import (
+from dictionary_learning.trainers.top_k import AutoEncoderTopK
+from dictionary_learning.trainers.batch_top_k import BatchTopKSAE
+from dictionary_learning.trainers.matryoshka_batch_top_k import MatryoshkaBatchTopKSAE
+from dictionary_learning.dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
     AutoEncoderNew,
